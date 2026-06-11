@@ -359,6 +359,12 @@
 
   /* ZOOM */
   #zoom-display { font-size: 12px; color: #888; min-width: 36px; text-align: center; }
+
+  .multi-dot {
+    width: 12px; height: 12px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
+    border: 1.5px solid rgba(255,255,255,0.25); transition: transform 0.1s;
+  }
+  .multi-dot:hover { transform: scale(1.3); }
 </style>
 </head>
 <body>
@@ -380,11 +386,20 @@
   <button onclick="saveJSON()">Save</button>
   <button onclick="document.getElementById('load-input').click()">Load</button>
   <input id="load-input" type="file" accept=".json" style="display:none" onchange="loadJSON(event)">
+  <button onclick="undo()">Undo</button>
   <button class="danger" onclick="clearAll()">Clear</button>
 </div>
 
 <div id="multi-action">
   <span id="multi-action-label"></span>
+  <div style="display:flex;align-items:center;gap:4px;border-right:1px solid rgba(255,255,255,0.15);padding-right:8px;margin-right:2px">
+    <span style="font-size:10px;color:rgba(255,255,255,0.45);margin-right:2px">Accent</span>
+    <div id="multi-color-dots" style="display:flex;gap:3px"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:4px;border-right:1px solid rgba(255,255,255,0.15);padding-right:8px;margin-right:2px">
+    <span style="font-size:10px;color:rgba(255,255,255,0.45);margin-right:2px">BG</span>
+    <div id="multi-bg-dots" style="display:flex;gap:3px"></div>
+  </div>
   <button onclick="dupeMulti()">Duplicate</button>
   <button onclick="deleteMulti()" style="background:rgba(200,60,60,0.3)">Delete</button>
   <button class="ma-close" onclick="clearMultiSelect()">✕</button>
@@ -454,6 +469,7 @@ let callouts = [];
 let selected = null;
 let selectedCallout = null;
 let selectedSet = new Set();
+let undoStack = [];
 let zoom = 1;
 let nodeCounter = 0;
 let calloutCounter = 0;
@@ -487,10 +503,62 @@ BG_COLORS.forEach(c => {
   bgSwatchContainer.appendChild(s);
 });
 
+// Build multi-select color dots
+const multiColorDots = document.getElementById('multi-color-dots');
+COLORS.forEach(c => {
+  const d = document.createElement('div');
+  d.className = 'multi-dot';
+  d.style.background = c.bar === 'transparent' ? '#f0ede4' : c.bar;
+  d.title = c.name;
+  d.onclick = () => setMultiColor(c.name);
+  multiColorDots.appendChild(d);
+});
+const multiBgDots = document.getElementById('multi-bg-dots');
+BG_COLORS.forEach(c => {
+  const d = document.createElement('div');
+  d.className = 'multi-dot';
+  d.style.background = c.display;
+  d.title = c.name;
+  d.onclick = () => setMultiBgColor(c.name);
+  multiBgDots.appendChild(d);
+});
+
+// UNDO
+function pushUndo() {
+  undoStack.push({
+    nodes: JSON.parse(JSON.stringify(nodes)),
+    callouts: JSON.parse(JSON.stringify(callouts)),
+    nodeCounter, calloutCounter,
+  });
+  if (undoStack.length > 60) undoStack.shift();
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  const state = undoStack.pop();
+  nodes = state.nodes;
+  callouts = state.callouts;
+  nodeCounter = state.nodeCounter;
+  calloutCounter = state.calloutCounter;
+  selected = null; selectedCallout = null;
+  clearMultiSelect();
+  panel.classList.remove('open');
+  render();
+  renderCallouts();
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  }
+});
+
 function uid() { return 'n' + (++nodeCounter); }
 function cuid() { return 'c' + (++calloutCounter); }
 
 function addRootNode() {
+  pushUndo();
   const x = 60 + Math.random() * 300;
   const y = 60 + Math.random() * 200;
   const id = uid();
@@ -501,6 +569,7 @@ function addRootNode() {
 
 function addChildToSelected() {
   if (!selected) return;
+  pushUndo();
   const parent = nodes.find(n => n.id === selected);
   if (!parent) return;
   const id = uid();
@@ -522,6 +591,7 @@ function addCallout() {
 
 function deleteSelected() {
   if (!selected) return;
+  pushUndo();
   removeNodeAndDescendants(selected);
   selected = null;
   closePanel();
@@ -536,6 +606,7 @@ function removeNodeAndDescendants(id) {
 
 function clearAll() {
   if (!confirm('Clear all nodes and callouts?')) return;
+  pushUndo();
   nodes = []; callouts = []; selected = null; selectedCallout = null;
   closePanel(); render(); renderCallouts();
 }
@@ -586,6 +657,7 @@ function updateSelectedNode() {
 
 function setSelectedColor(colorName) {
   if (!selected) return;
+  pushUndo();
   const node = nodes.find(n => n.id === selected);
   if (!node) return;
   node.color = colorName;
@@ -597,6 +669,7 @@ function setSelectedColor(colorName) {
 
 function setSelectedBgColor(colorName) {
   if (!selected) return;
+  pushUndo();
   const node = nodes.find(n => n.id === selected);
   if (!node) return;
   node.bgColor = colorName;
@@ -731,6 +804,7 @@ function createCalloutEl(co) {
   // delete
   el.querySelector('.callout-del').addEventListener('click', e => {
     e.stopPropagation();
+    pushUndo();
     callouts = callouts.filter(c => c.id !== co.id);
     el.remove();
     if (selectedCallout === co.id) selectedCallout = null;
@@ -762,8 +836,11 @@ function startCalloutDrag(e, co, el) {
   const startX = e.clientX, startY = e.clientY;
   const startCX = co.x, startCY = co.y;
   el.style.cursor = 'grabbing';
+  let moved = false;
+  pushUndo();
 
   function onMove(ev) {
+    moved = true;
     co.x = Math.round(startCX + (ev.clientX - startX) / zoom);
     co.y = Math.round(startCY + (ev.clientY - startY) / zoom);
     el.style.left = co.x + 'px';
@@ -771,6 +848,7 @@ function startCalloutDrag(e, co, el) {
     expandCanvas();
   }
   function onUp() {
+    if (!moved) undoStack.pop();
     el.style.cursor = '';
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
@@ -863,33 +941,66 @@ function showMultiAction() {
   bar.style.display = 'flex';
 }
 
+function setMultiColor(colorName) {
+  if (selectedSet.size === 0) return;
+  pushUndo();
+  selectedSet.forEach(id => { const n = nodes.find(x => x.id === id); if (n) n.color = colorName; });
+  render();
+}
+
+function setMultiBgColor(colorName) {
+  if (selectedSet.size === 0) return;
+  pushUndo();
+  selectedSet.forEach(id => { const n = nodes.find(x => x.id === id); if (n) n.bgColor = colorName; });
+  render();
+}
+
+function findEmptySpace(dupeIds) {
+  const dupeNodes = dupeIds.map(id => nodes.find(n => n.id === id)).filter(Boolean);
+  if (dupeNodes.length === 0) return;
+  const EST = 170;
+  const GAP = 60;
+  const minX = Math.min(...dupeNodes.map(n => n.x));
+  const minY = Math.min(...dupeNodes.map(n => n.y));
+  const otherNodes = nodes.filter(n => !dupeIds.includes(n.id));
+  let rightmost = 60;
+  otherNodes.forEach(n => {
+    const el = canvas.querySelector(`[data-id="${n.id}"]`);
+    rightmost = Math.max(rightmost, n.x + (el ? el.offsetWidth : EST));
+  });
+  const dx = rightmost + GAP - minX;
+  dupeNodes.forEach(n => { n.x = Math.round(n.x + dx); });
+}
+
 function dupeMulti() {
   if (selectedSet.size === 0) return;
+  pushUndo();
   const idMap = {};
-  const OFFSET = 40;
   selectedSet.forEach(id => {
     const src = nodes.find(n => n.id === id);
     if (!src) return;
     const newId = uid();
     idMap[id] = newId;
-    nodes.push({ ...src, id: newId, x: src.x + OFFSET, y: src.y + OFFSET });
+    nodes.push({ ...src, id: newId }); // same position as original — findEmptySpace will relocate
   });
-  // remap parentIds: if a node's parent was also duplicated, connect copies together
   Object.entries(idMap).forEach(([, newId]) => {
     const newNode = nodes.find(n => n.id === newId);
     if (newNode && newNode.parentId && idMap[newNode.parentId]) {
       newNode.parentId = idMap[newNode.parentId];
     }
   });
-  selectedSet = new Set(Object.values(idMap));
-  render();
+  const newIds = Object.values(idMap);
+  selectedSet = new Set(newIds);
+  render(); // render first so offsetWidths are available
+  findEmptySpace(newIds);
+  render(); // re-render at relocated positions
   showMultiAction();
 }
 
 function deleteMulti() {
   if (selectedSet.size === 0) return;
+  pushUndo();
   selectedSet.forEach(id => { nodes = nodes.filter(n => n.id !== id); });
-  // clean up orphaned children whose parent was deleted
   nodes.forEach(n => { if (n.parentId && !nodes.find(p => p.id === n.parentId)) n.parentId = null; });
   clearMultiSelect();
   render();
@@ -964,6 +1075,7 @@ function startRubberBand(e) {
 
 // DUPLICATE
 function dupeNode(id) {
+  pushUndo();
   const src = nodes.find(n => n.id === id);
   if (!src) return;
   const newId = uid();
@@ -979,6 +1091,8 @@ function dupeSelected() {
 // REPARENT by dragging the port dot
 function startReparentDrag(e, nodeId) {
   const node = nodes.find(n => n.id === nodeId);
+  const origParentId = node.parentId;
+  pushUndo();
   const el = canvas.querySelector(`[data-id="${nodeId}"]`);
 
   const ghostPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1032,6 +1146,7 @@ function startReparentDrag(e, nodeId) {
     } else if (!nodeBelow) {
       node.parentId = null;
     }
+    if (node.parentId === origParentId) undoStack.pop(); // no change
     render();
   }
 
@@ -1166,18 +1281,70 @@ function snapPos(rawX, rawY, movingId) {
   return { x: Math.round(bx.val), y: Math.round(by.val) };
 }
 
+// GROUP DRAG
+function startGroupDrag(e, anchorId) {
+  e.preventDefault();
+  pushUndo();
+  const startX = e.clientX, startY = e.clientY;
+  const startPositions = {};
+  selectedSet.forEach(id => {
+    const n = nodes.find(x => x.id === id);
+    if (n) startPositions[id] = { x: n.x, y: n.y };
+  });
+  let moved = false;
+
+  selectedSet.forEach(id => canvas.querySelector(`[data-id="${id}"]`)?.classList.add('dragging'));
+
+  function onMove(ev) {
+    moved = true;
+    const dx = (ev.clientX - startX) / zoom;
+    const dy = (ev.clientY - startY) / zoom;
+    selectedSet.forEach(id => {
+      const n = nodes.find(x => x.id === id);
+      const el = canvas.querySelector(`[data-id="${id}"]`);
+      if (!n || !el) return;
+      n.x = Math.round(startPositions[id].x + dx);
+      n.y = Math.round(startPositions[id].y + dy);
+      el.style.left = n.x + 'px';
+      el.style.top = n.y + 'px';
+    });
+    drawLines();
+    expandCanvas();
+  }
+
+  function onUp() {
+    if (!moved) undoStack.pop();
+    selectedSet.forEach(id => canvas.querySelector(`[data-id="${id}"]`)?.classList.remove('dragging'));
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
 // DRAG (nodes)
 function startDrag(e, nodeId) {
   e.preventDefault();
+
+  // If node is in multi-select group, drag the whole group
+  if (selectedSet.has(nodeId) && selectedSet.size > 1) {
+    startGroupDrag(e, nodeId);
+    return;
+  }
+
   const node = nodes.find(n => n.id === nodeId);
   const el = canvas.querySelector(`[data-id="${nodeId}"]`);
   el.classList.add('dragging');
   selectNode(nodeId);
+  pushUndo();
 
   const startX = e.clientX, startY = e.clientY;
   const startNodeX = node.x, startNodeY = node.y;
+  let moved = false;
 
   function onMove(ev) {
+    moved = true;
     const rawX = startNodeX + (ev.clientX - startX) / zoom;
     const rawY = startNodeY + (ev.clientY - startY) / zoom;
     const snapped = snapPos(rawX, rawY, nodeId);
@@ -1190,6 +1357,7 @@ function startDrag(e, nodeId) {
   }
 
   function onUp() {
+    if (!moved) undoStack.pop();
     el.classList.remove('dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
