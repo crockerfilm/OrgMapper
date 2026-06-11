@@ -7,358 +7,208 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  :root {
+    --bg: #f5f5f3; --surface: #fff; --surface2: #f0ede4;
+    --border: #d4d1c8; --border2: #e0ddd6;
+    --text: #1a1a18; --text2: #888780; --text3: #aaa;
+    --line: #c0bdb4; --shadow: rgba(0,0,0,0.08);
+  }
+  body.dark {
+    --bg: #1c1c1e; --surface: #2c2c2e; --surface2: #3a3a3c;
+    --border: #48484a; --border2: #3a3a3c;
+    --text: #f0f0ee; --text2: #9a9a98; --text3: #555;
+    --line: #555; --shadow: rgba(0,0,0,0.35);
+  }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #f5f5f3;
-    color: #1a1a18;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
   }
 
   /* TOOLBAR */
   #toolbar {
-    background: #fff;
-    border-bottom: 1px solid #e0ddd6;
-    padding: 10px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-    flex-wrap: wrap;
+    background: var(--surface); border-bottom: 1px solid var(--border2);
+    padding: 10px 16px; display: flex; align-items: center;
+    gap: 12px; flex-shrink: 0; flex-wrap: wrap;
   }
-
-  #toolbar h1 {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1a1a18;
-    margin-right: 4px;
-  }
-
-  .sep { width: 1px; height: 24px; background: #e0ddd6; }
+  #toolbar h1 { font-size: 15px; font-weight: 600; color: var(--text); margin-right: 4px; }
+  .sep { width: 1px; height: 24px; background: var(--border2); }
 
   button {
-    font-family: inherit;
-    font-size: 13px;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid #d4d1c8;
-    background: #fff;
-    color: #1a1a18;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background 0.1s;
-    white-space: nowrap;
+    font-family: inherit; font-size: 13px; padding: 6px 12px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+    cursor: pointer; display: flex; align-items: center;
+    gap: 6px; transition: background 0.1s; white-space: nowrap;
   }
-  button:hover { background: #f5f5f3; }
-  button.primary {
-    background: #1a1a18;
-    color: #fff;
-    border-color: #1a1a18;
-  }
-  button.primary:hover { background: #333; }
-  button.danger { color: #b33; border-color: #e0b0b0; }
-  button.danger:hover { background: #fff0f0; }
+  button:hover { background: var(--surface2); }
+  button.primary { background: #378add; color: #fff; border-color: #378add; }
+  button.primary:hover { background: #2a6ab0; }
+  button.danger { color: #e05555; border-color: #c08080; }
+  button.danger:hover { background: rgba(224,85,85,0.1); }
 
   #chart-title-input {
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    border: none;
-    background: transparent;
-    color: #1a1a18;
-    outline: none;
-    min-width: 120px;
-    max-width: 220px;
+    font-family: inherit; font-size: 14px; font-weight: 500;
+    border: none; background: transparent; color: var(--text);
+    outline: none; min-width: 120px; max-width: 220px;
   }
-  #chart-title-input:focus { border-bottom: 1.5px solid #888; }
+  #chart-title-input:focus { border-bottom: 1.5px solid var(--text2); }
 
   /* CANVAS */
-  #canvas-wrap {
-    flex: 1;
-    overflow: auto;
-    position: relative;
-  }
-
-  #canvas {
-    position: relative;
-    min-width: 100%;
-    min-height: 100%;
-  }
-
+  #canvas-wrap { flex: 1; overflow: auto; position: relative; }
+  #canvas { position: relative; min-width: 100%; min-height: 100%; }
   svg#lines {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    overflow: visible;
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; pointer-events: none; overflow: visible;
+    z-index: 5;
   }
+  .node { z-index: 2; }
 
   /* NODES */
   .node {
-    position: absolute;
-    background: #fff;
-    border: 1.5px solid #d4d1c8;
-    border-radius: 8px;
-    padding: 10px 14px;
-    min-width: 140px;
-    max-width: 200px;
-    cursor: grab;
-    user-select: none;
+    position: absolute; background: var(--surface);
+    border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; min-width: 140px; max-width: 200px;
+    cursor: grab; user-select: none;
     transition: box-shadow 0.15s, border-color 0.15s;
   }
-  .node:hover { border-color: #aaa; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .node:hover { border-color: var(--text2); box-shadow: 0 2px 8px var(--shadow); }
   .node.selected { border-color: #3b6d11; box-shadow: 0 0 0 3px #d4e9b8; }
-  .node.dragging { box-shadow: 0 6px 20px rgba(0,0,0,0.15); opacity: 0.92; cursor: grabbing; z-index: 1000; }
+  .node.dragging { box-shadow: 0 6px 20px var(--shadow); opacity: 0.92; cursor: grabbing; z-index: 1000; }
 
   .node-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: #1a1a18;
-    outline: none;
-    width: 100%;
-    border: none;
-    background: transparent;
-    font-family: inherit;
-    cursor: text;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    outline: none; width: 100%; border: none;
+    background: transparent; font-family: inherit; cursor: text;
   }
   .node-role {
-    font-size: 11px;
-    color: #888780;
-    margin-top: 2px;
-    outline: none;
-    width: 100%;
-    border: none;
-    background: transparent;
-    font-family: inherit;
-    cursor: text;
+    font-size: 11px; color: var(--text2); margin-top: 2px;
+    outline: none; width: 100%; border: none;
+    background: transparent; font-family: inherit; cursor: text;
   }
-  .node-name:focus, .node-role:focus { background: rgba(255,255,255,0.6); border-radius: 3px; }
+  .node-name:focus, .node-role:focus { background: rgba(128,128,128,0.1); border-radius: 3px; }
 
-  .node-actions {
-    display: none;
-    margin-top: 8px;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
+  .node-actions { display: none; margin-top: 8px; gap: 4px; flex-wrap: wrap; }
   .node:hover .node-actions, .node.selected .node-actions { display: flex; }
 
   .node-btn {
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    border: 1px solid #e0ddd6;
-    background: rgba(255,255,255,0.7);
-    color: #555;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.1s;
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text2); cursor: pointer; font-family: inherit; transition: background 0.1s;
   }
-  .node-btn:hover { background: #e8e5dc; }
-  .node-btn.del { color: #b33; border-color: #e0b0b0; }
-  .node-btn.del:hover { background: #fff0f0; }
+  .node-btn:hover { background: var(--border); }
+  .node-btn.del { color: #e05555; border-color: #c08080; }
+  .node-btn.del:hover { background: rgba(224,85,85,0.1); }
 
   /* reparent port */
   .node-port {
-    position: absolute;
-    width: 11px; height: 11px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #888;
-    cursor: crosshair;
-    opacity: 0;
-    transition: opacity 0.15s;
-    z-index: 10;
-    top: -6px; left: 50%;
-    transform: translateX(-50%);
+    position: absolute; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--text2);
+    cursor: crosshair; opacity: 0; transition: opacity 0.15s;
+    z-index: 10; top: -6px; left: 50%; transform: translateX(-50%);
   }
   .node:hover .node-port, .node.selected .node-port { opacity: 1; }
-  .node.drop-target { border-color: #378add !important; box-shadow: 0 0 0 3px #c5dff8 !important; }
-  .node.multi-selected { border-color: #378add; box-shadow: 0 0 0 3px #c5dff8; }
+  .node.drop-target  { border-color: #378add !important; box-shadow: 0 0 0 3px rgba(55,138,221,0.3) !important; }
+  .node.multi-selected { border-color: #378add; box-shadow: 0 0 0 3px rgba(55,138,221,0.3); }
 
   #rubber-band {
-    position: absolute;
-    border: 1.5px dashed #378add;
-    background: rgba(55,138,221,0.07);
-    pointer-events: none;
-    z-index: 300;
-    border-radius: 3px;
+    position: absolute; border: 1.5px dashed #378add;
+    background: rgba(55,138,221,0.07); pointer-events: none; z-index: 300; border-radius: 3px;
   }
 
   #multi-action {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1a1a18;
-    color: #fff;
-    border-radius: 10px;
-    padding: 8px 8px 8px 16px;
-    font-size: 13px;
-    display: none;
-    align-items: center;
-    gap: 8px;
-    z-index: 700;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-    white-space: nowrap;
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #1a1a18; color: #fff; border-radius: 10px;
+    padding: 8px 8px 8px 16px; font-size: 13px;
+    display: none; align-items: center; gap: 8px;
+    z-index: 700; box-shadow: 0 4px 20px rgba(0,0,0,0.4); white-space: nowrap;
   }
+  body.dark #multi-action { background: #3a3a3c; border: 1px solid #555; }
   #multi-action button {
-    font-size: 12px; padding: 5px 12px;
-    border-radius: 6px; border: none;
-    background: rgba(255,255,255,0.15); color: #fff;
-    cursor: pointer;
+    font-size: 12px; padding: 5px 12px; border-radius: 6px; border: none;
+    background: rgba(255,255,255,0.15); color: #fff; cursor: pointer;
   }
   #multi-action button:hover { background: rgba(255,255,255,0.25); }
-  #multi-action button.ma-close {
-    padding: 5px 8px; background: transparent; color: #aaa;
-  }
+  #multi-action button.ma-close { padding: 5px 8px; background: transparent; color: #aaa; }
   #multi-action button.ma-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
 
   /* color bar */
-  .node-color-bar {
-    height: 3px;
-    margin: -10px -14px 8px;
-    border-radius: 6px 6px 0 0;
-  }
+  .node-color-bar { height: 3px; margin: -10px -14px 8px; border-radius: 6px 6px 0 0; }
 
   /* CALLOUTS */
   .callout {
-    position: absolute;
-    background: #fffde7;
-    border: 1.5px solid #e6d84a;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    z-index: 200;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-    overflow: hidden;
-    user-select: none;
+    position: absolute; border-radius: 8px; display: flex; flex-direction: column;
+    z-index: 200; box-shadow: 0 2px 8px var(--shadow); overflow: hidden; user-select: none;
   }
-  .callout.selected { border-color: #b0930a; box-shadow: 0 0 0 3px #fff0a0; }
-
+  .callout.selected { box-shadow: 0 0 0 3px rgba(55,138,221,0.4) !important; }
   .callout-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 8px;
-    background: rgba(0,0,0,0.06);
-    cursor: grab;
-    flex-shrink: 0;
-    gap: 4px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 8px; cursor: grab; flex-shrink: 0; gap: 4px;
   }
   .callout-header:active { cursor: grabbing; }
-
-  .callout-color-dots {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-  }
+  .callout-color-dots { display: flex; gap: 4px; align-items: center; }
   .callout-dot {
-    width: 12px; height: 12px; border-radius: 50%;
-    cursor: pointer;
-    border: 1.5px solid rgba(0,0,0,0.15);
-    transition: transform 0.1s;
+    width: 12px; height: 12px; border-radius: 50%; cursor: pointer;
+    border: 1.5px solid rgba(0,0,0,0.15); transition: transform 0.1s;
   }
   .callout-dot:hover { transform: scale(1.2); }
   .callout-dot.active { border-color: #333; }
-
   .callout-del {
-    font-size: 12px;
-    line-height: 1;
-    padding: 2px 5px;
-    border-radius: 4px;
-    border: none;
-    background: transparent;
-    color: #999;
-    cursor: pointer;
-    margin-left: auto;
+    font-size: 12px; line-height: 1; padding: 2px 5px; border-radius: 4px;
+    border: none; background: transparent; color: #999; cursor: pointer; margin-left: auto;
   }
-  .callout-del:hover { background: #ffcccc; color: #b33; }
-
-  .callout-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    min-height: 0;
-  }
-
+  .callout-del:hover { background: rgba(224,85,85,0.2); color: #e05555; }
+  .callout-body { flex: 1; display: flex; flex-direction: column; position: relative; min-height: 0; }
   .callout-text {
-    flex: 1;
-    border: none;
-    background: transparent;
-    padding: 8px 10px;
-    font-family: inherit;
-    font-size: 13px;
-    resize: none;
-    outline: none;
-    color: #333;
-    cursor: text;
-    width: 100%;
-    min-height: 60px;
+    flex: 1; border: none; background: transparent; padding: 8px 10px;
+    font-family: inherit; font-size: 13px; resize: none; outline: none;
+    color: inherit; cursor: text; width: 100%; min-height: 60px;
   }
-
   .callout-resize {
-    position: absolute;
-    bottom: 0; right: 0;
-    width: 14px; height: 14px;
-    cursor: se-resize;
-    z-index: 10;
+    position: absolute; bottom: 0; right: 0; width: 14px; height: 14px;
+    cursor: se-resize; z-index: 10;
   }
   .callout-resize::after {
-    content: '';
-    position: absolute;
-    bottom: 3px; right: 3px;
+    content: ''; position: absolute; bottom: 3px; right: 3px;
     width: 6px; height: 6px;
-    border-right: 2px solid rgba(0,0,0,0.25);
-    border-bottom: 2px solid rgba(0,0,0,0.25);
+    border-right: 2px solid rgba(128,128,128,0.4);
+    border-bottom: 2px solid rgba(128,128,128,0.4);
   }
 
   /* PANEL */
   #panel {
-    position: fixed;
-    right: 0; top: 0; bottom: 0;
-    width: 240px;
-    background: #fff;
-    border-left: 1px solid #e0ddd6;
-    padding: 16px;
-    overflow-y: auto;
-    transform: translateX(100%);
-    transition: transform 0.2s;
-    z-index: 500;
+    position: fixed; right: 0; top: 0; bottom: 0; width: 240px;
+    background: var(--surface); border-left: 1px solid var(--border2);
+    padding: 16px; overflow-y: auto;
+    transform: translateX(100%); transition: transform 0.2s; z-index: 500;
   }
   #panel.open { transform: translateX(0); }
-
-  #panel h2 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
-
-  .field-label { font-size: 12px; color: #888; margin-bottom: 4px; margin-top: 12px; }
+  #panel h2 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
+  .field-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; margin-top: 12px; }
   .field-input {
     width: 100%; font-family: inherit; font-size: 13px;
-    border: 1px solid #d4d1c8; border-radius: 6px;
-    padding: 6px 8px; background: #fff; color: #1a1a18; outline: none;
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; background: var(--surface); color: var(--text); outline: none;
   }
-  .field-input:focus { border-color: #888; }
+  .field-input:focus { border-color: var(--text2); }
 
   .color-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
   .swatch {
     width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
     border: 2px solid transparent; transition: border-color 0.1s;
   }
-  .swatch.active { border-color: #333; }
+  .swatch.active { border-color: var(--text); }
 
   /* EMPTY STATE */
   #empty {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center; color: #aaa; pointer-events: none;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center; color: var(--text3); pointer-events: none;
   }
   #empty p { font-size: 14px; margin-top: 6px; }
 
   /* ZOOM */
-  #zoom-display { font-size: 12px; color: #888; min-width: 36px; text-align: center; }
+  #zoom-display { font-size: 12px; color: var(--text2); min-width: 36px; text-align: center; }
 
   .multi-dot {
     width: 12px; height: 12px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
@@ -367,7 +217,7 @@
   .multi-dot:hover { transform: scale(1.3); }
 </style>
 </head>
-<body>
+<body class="dark">
 
 <div id="toolbar">
   <h1>&#9660;</h1>
@@ -387,6 +237,7 @@
   <button onclick="document.getElementById('load-input').click()">Load</button>
   <input id="load-input" type="file" accept=".json" style="display:none" onchange="loadJSON(event)">
   <button onclick="undo()">Undo</button>
+  <button onclick="toggleDark()" id="dark-btn">☀︎</button>
   <button class="danger" onclick="clearAll()">Clear</button>
 </div>
 
@@ -445,23 +296,23 @@ const COLORS = [
 ];
 
 const BG_COLORS = [
-  { name: 'none',   bg: '#ffffff', display: '#f0ede4' },
-  { name: 'blue',   bg: '#e8f2fc', display: '#e8f2fc' },
-  { name: 'green',  bg: '#edf6dc', display: '#edf6dc' },
-  { name: 'amber',  bg: '#fef4e0', display: '#fef4e0' },
-  { name: 'coral',  bg: '#fdeee8', display: '#fdeee8' },
-  { name: 'purple', bg: '#eeedf9', display: '#eeedf9' },
-  { name: 'teal',   bg: '#e0f4ee', display: '#e0f4ee' },
-  { name: 'pink',   bg: '#fce9f0', display: '#fce9f0' },
+  { name: 'none',   bg: '#ffffff', bgDark: '#2c2c2e', display: '#f0ede4', displayDark: '#3a3a3c' },
+  { name: 'blue',   bg: '#e8f2fc', bgDark: '#152232', display: '#e8f2fc', displayDark: '#1a2d40' },
+  { name: 'green',  bg: '#edf6dc', bgDark: '#162210', display: '#edf6dc', displayDark: '#1a2c14' },
+  { name: 'amber',  bg: '#fef4e0', bgDark: '#221a08', display: '#fef4e0', displayDark: '#2e230a' },
+  { name: 'coral',  bg: '#fdeee8', bgDark: '#221010', display: '#fdeee8', displayDark: '#2e1414' },
+  { name: 'purple', bg: '#eeedf9', bgDark: '#1a1830', display: '#eeedf9', displayDark: '#22203e' },
+  { name: 'teal',   bg: '#e0f4ee', bgDark: '#0e2420', display: '#e0f4ee', displayDark: '#122e28' },
+  { name: 'pink',   bg: '#fce9f0', bgDark: '#221020', display: '#fce9f0', displayDark: '#2e1428' },
 ];
 
 const CALLOUT_COLORS = [
-  { name: 'yellow', bg: '#fffde7', header: '#f0e84a40', border: '#e6d84a' },
-  { name: 'blue',   bg: '#e8f2fc', header: '#378add30', border: '#8dbfe8' },
-  { name: 'green',  bg: '#edf6dc', header: '#63992230', border: '#9ec95a' },
-  { name: 'pink',   bg: '#fce9f0', header: '#d4537e30', border: '#e89bba' },
-  { name: 'purple', bg: '#eeedf9', header: '#7f77dd30', border: '#b0acec' },
-  { name: 'white',  bg: '#ffffff', header: '#00000010', border: '#d4d1c8' },
+  { name: 'yellow', bg: '#fffde7', bgDark: '#2a2510', header: '#f0e84a30', border: '#e6d84a', borderDark: '#6a5e10' },
+  { name: 'blue',   bg: '#e8f2fc', bgDark: '#0e1f30', header: '#378add25', border: '#8dbfe8', borderDark: '#2a5070' },
+  { name: 'green',  bg: '#edf6dc', bgDark: '#0e2010', header: '#63992220', border: '#9ec95a', borderDark: '#2a5020' },
+  { name: 'pink',   bg: '#fce9f0', bgDark: '#2a0e18', header: '#d4537e20', border: '#e89bba', borderDark: '#602040' },
+  { name: 'purple', bg: '#eeedf9', bgDark: '#180e28', header: '#7f77dd20', border: '#b0acec', borderDark: '#402880' },
+  { name: 'white',  bg: '#ffffff', bgDark: '#2c2c2e', header: '#00000008', border: '#d4d1c8', borderDark: '#48484a' },
 ];
 
 let nodes = [];
@@ -478,6 +329,20 @@ const canvas = document.getElementById('canvas');
 const svg = document.getElementById('lines');
 const panel = document.getElementById('panel');
 const empty = document.getElementById('empty');
+
+function isDark() { return document.body.classList.contains('dark'); }
+
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  document.getElementById('dark-btn').textContent = isDark() ? '☀︎' : '☽';
+  // refresh bg swatches for current mode
+  document.querySelectorAll('#panel-bg-colors .swatch').forEach(s => {
+    const c = BG_COLORS.find(x => x.name === s.dataset.bgColor);
+    if (c) s.style.background = isDark() ? c.displayDark : c.display;
+  });
+  render();
+  renderCallouts();
+}
 
 // Build accent color swatches
 const swatchContainer = document.getElementById('panel-colors');
@@ -496,7 +361,7 @@ const bgSwatchContainer = document.getElementById('panel-bg-colors');
 BG_COLORS.forEach(c => {
   const s = document.createElement('div');
   s.className = 'swatch' + (c.name === 'none' ? ' active' : '');
-  s.style.background = c.display;
+  s.style.background = isDark() ? c.displayDark : c.display;
   s.style.border = c.name === 'none' ? '2px solid #ccc' : '2px solid transparent';
   s.dataset.bgColor = c.name;
   s.onclick = () => setSelectedBgColor(c.name);
@@ -684,7 +549,9 @@ function getColorBar(colorName) {
 }
 
 function getNodeBg(bgColorName) {
-  return BG_COLORS.find(c => c.name === bgColorName)?.bg || '#ffffff';
+  const c = BG_COLORS.find(x => x.name === bgColorName);
+  if (!c) return isDark() ? '#2c2c2e' : '#ffffff';
+  return isDark() ? c.bgDark : c.bg;
 }
 
 function render() {
@@ -753,11 +620,12 @@ function renderCallouts() {
 
 function applyCalloutColor(el, colorName) {
   const c = CALLOUT_COLORS.find(x => x.name === colorName) || CALLOUT_COLORS[0];
-  el.style.background = c.bg;
-  el.style.borderColor = c.border;
+  const dark = isDark();
+  el.style.background = dark ? c.bgDark : c.bg;
+  el.style.borderColor = dark ? c.borderDark : c.border;
+  el.style.color = dark ? '#d0d0ce' : '#333';
   const header = el.querySelector('.callout-header');
-  if (header) header.style.background = c.header;
-  // update active dot
+  if (header) header.style.background = dark ? 'rgba(255,255,255,0.05)' : c.header;
   el.querySelectorAll('.callout-dot').forEach(d => {
     d.classList.toggle('active', d.dataset.cc === colorName);
   });
@@ -1186,7 +1054,7 @@ function drawLines() {
     const d = computeEdgePath(px, py, cx, cy, node.id, parent.id);
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', d);
-    path.setAttribute('stroke', '#bbb');
+    path.setAttribute('stroke', isDark() ? '#555' : '#c0bdb4');
     path.setAttribute('stroke-width', '1.5');
     path.setAttribute('fill', 'none');
     svg.appendChild(path);
@@ -1194,32 +1062,37 @@ function drawLines() {
 }
 
 function computeEdgePath(px, py, cx, cy, skipId, skipParentId) {
-  const MARGIN = 8;
-  const R = 6;
-
-  let midY = (py + cy) / 2;
-  const minX = Math.min(px, cx) - MARGIN;
-  const maxX = Math.max(px, cx) + MARGIN;
-
-  // Shift midY upward until the horizontal segment clears all nodes
-  for (let iter = 0; iter < 12; iter++) {
-    let blocked = null;
-    for (const n of nodes) {
-      if (n.id === skipId || n.id === skipParentId) continue;
-      const el = canvas.querySelector(`[data-id="${n.id}"]`);
-      if (!el) continue;
-      const nT = n.y - MARGIN, nB = n.y + el.offsetHeight + MARGIN;
-      const nL = n.x - MARGIN, nR = n.x + el.offsetWidth + MARGIN;
-      if (midY > nT && midY < nB && minX < nR && maxX > nL) {
-        blocked = nT;
-        break;
-      }
-    }
-    if (blocked === null) break;
-    midY = blocked - 2;
-  }
+  const M = 10; // margin around nodes
+  const R = 6;  // corner radius
 
   if (Math.abs(cx - px) < 2) return `M ${px} ${py} L ${cx} ${cy}`;
+
+  const minX = Math.min(px, cx) - M;
+  const maxX = Math.max(px, cx) + M;
+
+  // Collect Y-intervals of nodes strictly between parent-bottom and child-top
+  // whose X-range overlaps the horizontal segment
+  const intervals = [];
+  for (const n of nodes) {
+    if (n.id === skipId || n.id === skipParentId) continue;
+    const el = canvas.querySelector(`[data-id="${n.id}"]`);
+    if (!el) continue;
+    const nTop = n.y, nBot = n.y + el.offsetHeight;
+    // Only consider nodes that actually sit in the vertical gap between parent and child
+    if (nBot <= py || nTop >= cy) continue;
+    if (n.x - M < maxX && n.x + el.offsetWidth + M > minX) {
+      intervals.push([nTop - M, nBot + M]);
+    }
+  }
+  intervals.sort((a, b) => a[0] - b[0]);
+
+  // Start just below parent and scan forward, jumping over any blocking node
+  let midY = py + R + 4;
+  for (const [bTop, bBot] of intervals) {
+    if (midY > bTop && midY < bBot) midY = bBot + 4;
+    if (midY <= bTop) break;
+  }
+  midY = Math.max(py + R + 4, Math.min(midY, cy - R - 4));
 
   const dir = cx > px ? 1 : -1;
   return [
