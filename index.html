@@ -161,6 +161,23 @@
   .node-btn.del { color: #b33; border-color: #e0b0b0; }
   .node-btn.del:hover { background: #fff0f0; }
 
+  /* reparent port */
+  .node-port {
+    position: absolute;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #888;
+    cursor: crosshair;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 10;
+    top: -6px; left: 50%;
+    transform: translateX(-50%);
+  }
+  .node:hover .node-port, .node.selected .node-port { opacity: 1; }
+  .node.drop-target { border-color: #378add !important; box-shadow: 0 0 0 3px #c5dff8 !important; }
+
   /* color bar */
   .node-color-bar {
     height: 3px;
@@ -349,6 +366,7 @@
   <div class="color-swatches" id="panel-bg-colors"></div>
   <div style="margin-top: 20px; border-top: 1px solid #e0ddd6; padding-top: 14px; display:flex; flex-direction:column; gap:8px;">
     <button onclick="addChildToSelected()">+ Add child node</button>
+    <button onclick="dupeSelected()">Duplicate node</button>
     <button class="danger" onclick="deleteSelected()">Delete node</button>
   </div>
 </div>
@@ -741,12 +759,25 @@ function createNodeEl(node) {
     <input class="node-role" value="${esc(node.role)}" placeholder="Role" />
     <div class="node-actions">
       <button class="node-btn" data-action="add-child">+ Child</button>
+      <button class="node-btn" data-action="dupe">Dupe</button>
       <button class="node-btn del" data-action="delete">Delete</button>
     </div>
   `;
 
+  // reparent port dot
+  const port = document.createElement('div');
+  port.className = 'node-port';
+  port.title = 'Drag to reparent';
+  port.addEventListener('mousedown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    startReparentDrag(e, node.id);
+  });
+  el.appendChild(port);
+
   el.addEventListener('mousedown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    if (e.target === port) return;
     startDrag(e, node.id);
   });
 
@@ -763,11 +794,99 @@ function createNodeEl(node) {
   el.addEventListener('click', e => {
     if (e.target.tagName === 'INPUT') return;
     if (e.target.dataset.action === 'add-child') { selectNode(node.id); addChildToSelected(); return; }
+    if (e.target.dataset.action === 'dupe') { selectNode(node.id); dupeNode(node.id); return; }
     if (e.target.dataset.action === 'delete') { selectNode(node.id); deleteSelected(); return; }
     selectNode(node.id);
   });
 
   return el;
+}
+
+// DUPLICATE
+function dupeNode(id) {
+  const src = nodes.find(n => n.id === id);
+  if (!src) return;
+  const newId = uid();
+  nodes.push({ ...src, id: newId, x: src.x + 30, y: src.y + 30 });
+  render();
+  selectNode(newId);
+}
+
+function dupeSelected() {
+  if (selected) dupeNode(selected);
+}
+
+// REPARENT by dragging the port dot
+function startReparentDrag(e, nodeId) {
+  const node = nodes.find(n => n.id === nodeId);
+  const el = canvas.querySelector(`[data-id="${nodeId}"]`);
+
+  const ghostPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  ghostPath.setAttribute('stroke', '#378add');
+  ghostPath.setAttribute('stroke-width', '2');
+  ghostPath.setAttribute('stroke-dasharray', '6 3');
+  ghostPath.setAttribute('fill', 'none');
+  ghostPath.setAttribute('opacity', '0.8');
+  svg.appendChild(ghostPath);
+
+  let currentTarget = null;
+
+  function canvasPos(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: (clientX - rect.left) / zoom, y: (clientY - rect.top) / zoom };
+  }
+
+  function onMove(ev) {
+    const pos = canvasPos(ev.clientX, ev.clientY);
+    const srcX = node.x + el.offsetWidth / 2;
+    const srcY = node.y;
+    const my = (srcY + pos.y) / 2;
+    ghostPath.setAttribute('d', `M ${pos.x} ${pos.y} C ${pos.x} ${my}, ${srcX} ${my}, ${srcX} ${srcY}`);
+
+    const elemBelow = document.elementFromPoint(ev.clientX, ev.clientY);
+    const nodeBelow = elemBelow?.closest('.node');
+    const belowId = nodeBelow?.dataset?.id;
+
+    if (currentTarget !== belowId) {
+      if (currentTarget) canvas.querySelector(`[data-id="${currentTarget}"]`)?.classList.remove('drop-target');
+      currentTarget = null;
+      if (nodeBelow && belowId !== nodeId && !isDescendantOf(belowId, nodeId)) {
+        currentTarget = belowId;
+        nodeBelow.classList.add('drop-target');
+      }
+    }
+  }
+
+  function onUp(ev) {
+    ghostPath.remove();
+    if (currentTarget) canvas.querySelector(`[data-id="${currentTarget}"]`)?.classList.remove('drop-target');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+
+    const elemBelow = document.elementFromPoint(ev.clientX, ev.clientY);
+    const nodeBelow = elemBelow?.closest('.node');
+    const belowId = nodeBelow?.dataset?.id;
+
+    if (belowId && belowId !== nodeId && !isDescendantOf(belowId, nodeId)) {
+      node.parentId = belowId;
+    } else if (!nodeBelow) {
+      node.parentId = null;
+    }
+    render();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// returns true if checkId is a descendant of ancestorId
+function isDescendantOf(checkId, ancestorId) {
+  let cur = nodes.find(n => n.id === checkId);
+  while (cur) {
+    if (cur.parentId === ancestorId) return true;
+    cur = nodes.find(n => n.id === cur.parentId);
+  }
+  return false;
 }
 
 function esc(str) {
