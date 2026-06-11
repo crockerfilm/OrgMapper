@@ -1365,18 +1365,14 @@ function loadJSON(event) {
   event.target.value = '';
 }
 
-// Pan (middle mouse or space+drag) / rubber-band select / click-to-deselect
+// Pan / rubber-band select / click-to-deselect on background
 document.getElementById('canvas-wrap').addEventListener('mousedown', e => {
   const onCanvas = e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg;
-  if (e.button === 1 || (e.button === 0 && spaceDown)) {
-    e.preventDefault();
-    startPan(e);
-    return;
-  }
-  if (onCanvas && e.button === 0) {
-    e.preventDefault();
-    startRubberBand(e);
-  }
+  if (!onCanvas || e.button === 2) return;
+  e.preventDefault();
+  if (e.button === 1 || spaceDown) { startPan(e); return; }
+  // Left click on background: shift = rubber-band, plain = pan
+  if (e.shiftKey) { startRubberBand(e); } else { startPan(e); }
 });
 
 render();
