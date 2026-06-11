@@ -240,6 +240,7 @@
   <button onclick="saveJSON()">Save</button>
   <button onclick="document.getElementById('load-input').click()">Load</button>
   <input id="load-input" type="file" accept=".json" style="display:none" onchange="loadJSON(event)">
+  <button onclick="snapAllToGrid()">Snap to grid</button>
   <button onclick="undo()">Undo</button>
   <button onclick="toggleDark()" id="dark-btn">☀︎</button>
   <button class="danger" onclick="clearAll()">Clear</button>
@@ -428,10 +429,10 @@ function cuid() { return 'c' + (++calloutCounter); }
 
 function addRootNode() {
   pushUndo();
-  const x = 60 + Math.random() * 300;
-  const y = 60 + Math.random() * 200;
+  const wrap = document.getElementById('canvas-wrap');
+  const raw = snapPos(wrap.scrollLeft + 80 + Math.random() * 240, wrap.scrollTop + 80 + Math.random() * 160);
   const id = uid();
-  nodes.push({ id, name: 'New Node', role: '', x: Math.round(x), y: Math.round(y), color: 'none', bgColor: 'none', parentId: null });
+  nodes.push({ id, name: 'New Node', role: '', x: raw.x, y: raw.y, color: 'none', bgColor: 'none', parentId: null });
   render();
   selectNode(id);
 }
@@ -442,7 +443,8 @@ function addChildToSelected() {
   const parent = nodes.find(n => n.id === selected);
   if (!parent) return;
   const id = uid();
-  nodes.push({ id, name: 'New Node', role: '', x: parent.x + 60, y: parent.y + 120, color: parent.color, bgColor: parent.bgColor, parentId: parent.id });
+  const cp = snapPos(parent.x + 60, parent.y + 120);
+  nodes.push({ id, name: 'New Node', role: '', x: cp.x, y: cp.y, color: parent.color, bgColor: parent.bgColor, parentId: parent.id });
   render();
   selectNode(id);
 }
@@ -945,6 +947,13 @@ function startRubberBand(e) {
   document.addEventListener('mouseup', onUp);
 }
 
+function snapAllToGrid() {
+  if (nodes.length === 0) return;
+  pushUndo();
+  nodes.forEach(n => { const p = snapPos(n.x, n.y); n.x = p.x; n.y = p.y; });
+  render();
+}
+
 // DUPLICATE
 function dupeNode(id) {
   pushUndo();
@@ -1124,6 +1133,40 @@ function expandCanvas() {
   });
   canvas.style.width = maxX + 'px';
   canvas.style.height = maxY + 'px';
+}
+
+// PAN
+let spaceDown = false;
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' && !e.target.matches('input,textarea')) {
+    e.preventDefault();
+    spaceDown = true;
+    document.getElementById('canvas-wrap').style.cursor = 'grab';
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.key === ' ') {
+    spaceDown = false;
+    document.getElementById('canvas-wrap').style.cursor = '';
+  }
+});
+
+function startPan(e) {
+  const wrap = document.getElementById('canvas-wrap');
+  const startX = e.clientX + wrap.scrollLeft;
+  const startY = e.clientY + wrap.scrollTop;
+  wrap.style.cursor = 'grabbing';
+  function onMove(ev) {
+    wrap.scrollLeft = startX - ev.clientX;
+    wrap.scrollTop  = startY - ev.clientY;
+  }
+  function onUp() {
+    wrap.style.cursor = spaceDown ? 'grab' : '';
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 // SNAPPING
@@ -1322,9 +1365,15 @@ function loadJSON(event) {
   event.target.value = '';
 }
 
-// Rubber-band select / click-to-deselect on canvas
+// Pan (middle mouse or space+drag) / rubber-band select / click-to-deselect
 document.getElementById('canvas-wrap').addEventListener('mousedown', e => {
-  if (e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg) {
+  const onCanvas = e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg;
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    e.preventDefault();
+    startPan(e);
+    return;
+  }
+  if (onCanvas && e.button === 0) {
     e.preventDefault();
     startRubberBand(e);
   }
