@@ -177,6 +177,45 @@
   }
   .node:hover .node-port, .node.selected .node-port { opacity: 1; }
   .node.drop-target { border-color: #378add !important; box-shadow: 0 0 0 3px #c5dff8 !important; }
+  .node.multi-selected { border-color: #378add; box-shadow: 0 0 0 3px #c5dff8; }
+
+  #rubber-band {
+    position: absolute;
+    border: 1.5px dashed #378add;
+    background: rgba(55,138,221,0.07);
+    pointer-events: none;
+    z-index: 300;
+    border-radius: 3px;
+  }
+
+  #multi-action {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a18;
+    color: #fff;
+    border-radius: 10px;
+    padding: 8px 8px 8px 16px;
+    font-size: 13px;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    z-index: 700;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    white-space: nowrap;
+  }
+  #multi-action button {
+    font-size: 12px; padding: 5px 12px;
+    border-radius: 6px; border: none;
+    background: rgba(255,255,255,0.15); color: #fff;
+    cursor: pointer;
+  }
+  #multi-action button:hover { background: rgba(255,255,255,0.25); }
+  #multi-action button.ma-close {
+    padding: 5px 8px; background: transparent; color: #aaa;
+  }
+  #multi-action button.ma-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
 
   /* color bar */
   .node-color-bar {
@@ -344,6 +383,13 @@
   <button class="danger" onclick="clearAll()">Clear</button>
 </div>
 
+<div id="multi-action">
+  <span id="multi-action-label"></span>
+  <button onclick="dupeMulti()">Duplicate</button>
+  <button onclick="deleteMulti()" style="background:rgba(200,60,60,0.3)">Delete</button>
+  <button class="ma-close" onclick="clearMultiSelect()">✕</button>
+</div>
+
 <div id="canvas-wrap">
   <div id="canvas">
     <svg id="lines"></svg>
@@ -407,6 +453,7 @@ let nodes = [];
 let callouts = [];
 let selected = null;
 let selectedCallout = null;
+let selectedSet = new Set();
 let zoom = 1;
 let nodeCounter = 0;
 let calloutCounter = 0;
@@ -495,6 +542,7 @@ function clearAll() {
 
 function selectNode(id) {
   selectedCallout = null;
+  clearMultiSelect();
   canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
   selected = id;
   const node = nodes.find(n => n.id === id);
@@ -584,6 +632,7 @@ function render() {
     el.style.top = node.y + 'px';
     el.style.background = getNodeBg(node.bgColor || 'none');
     el.classList.toggle('selected', node.id === selected);
+    el.classList.toggle('multi-selected', selectedSet.has(node.id));
     el.querySelector('.node-name').value = node.name;
     el.querySelector('.node-role').value = node.role;
     const bar = el.querySelector('.node-color-bar');
@@ -800,6 +849,117 @@ function createNodeEl(node) {
   });
 
   return el;
+}
+
+// MULTI-SELECT
+function clearMultiSelect() {
+  selectedSet = new Set();
+  document.getElementById('multi-action').style.display = 'none';
+}
+
+function showMultiAction() {
+  const bar = document.getElementById('multi-action');
+  document.getElementById('multi-action-label').textContent = selectedSet.size + ' nodes selected';
+  bar.style.display = 'flex';
+}
+
+function dupeMulti() {
+  if (selectedSet.size === 0) return;
+  const idMap = {};
+  const OFFSET = 40;
+  selectedSet.forEach(id => {
+    const src = nodes.find(n => n.id === id);
+    if (!src) return;
+    const newId = uid();
+    idMap[id] = newId;
+    nodes.push({ ...src, id: newId, x: src.x + OFFSET, y: src.y + OFFSET });
+  });
+  // remap parentIds: if a node's parent was also duplicated, connect copies together
+  Object.entries(idMap).forEach(([, newId]) => {
+    const newNode = nodes.find(n => n.id === newId);
+    if (newNode && newNode.parentId && idMap[newNode.parentId]) {
+      newNode.parentId = idMap[newNode.parentId];
+    }
+  });
+  selectedSet = new Set(Object.values(idMap));
+  render();
+  showMultiAction();
+}
+
+function deleteMulti() {
+  if (selectedSet.size === 0) return;
+  selectedSet.forEach(id => { nodes = nodes.filter(n => n.id !== id); });
+  // clean up orphaned children whose parent was deleted
+  nodes.forEach(n => { if (n.parentId && !nodes.find(p => p.id === n.parentId)) n.parentId = null; });
+  clearMultiSelect();
+  render();
+}
+
+function startRubberBand(e) {
+  const wrap = document.getElementById('canvas-wrap');
+  const wrapRect = wrap.getBoundingClientRect();
+  const toCanvas = (cx, cy) => ({
+    x: (cx - wrapRect.left + wrap.scrollLeft) / zoom,
+    y: (cy - wrapRect.top  + wrap.scrollTop)  / zoom,
+  });
+  const start = toCanvas(e.clientX, e.clientY);
+  let end = { ...start };
+
+  const rbEl = document.createElement('div');
+  rbEl.id = 'rubber-band';
+  canvas.appendChild(rbEl);
+
+  function updateRect() {
+    const rx = Math.min(start.x, end.x), ry = Math.min(start.y, end.y);
+    const rw = Math.abs(end.x - start.x), rh = Math.abs(end.y - start.y);
+    rbEl.style.cssText = `left:${rx}px;top:${ry}px;width:${rw}px;height:${rh}px`;
+    return { rx, ry, rw, rh };
+  }
+
+  function onMove(ev) {
+    end = toCanvas(ev.clientX, ev.clientY);
+    updateRect();
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    const { rx, ry, rw, rh } = updateRect();
+    rbEl.remove();
+
+    if (rw < 5 && rh < 5) {
+      // treat as plain click — clear everything
+      clearMultiSelect();
+      selected = null; selectedCallout = null;
+      closePanel();
+      render();
+      canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
+      return;
+    }
+
+    const hit = new Set();
+    nodes.forEach(node => {
+      const el = canvas.querySelector(`[data-id="${node.id}"]`);
+      if (!el) return;
+      const nw = el.offsetWidth, nh = el.offsetHeight;
+      if (node.x < rx + rw && node.x + nw > rx && node.y < ry + rh && node.y + nh > ry) {
+        hit.add(node.id);
+      }
+    });
+
+    if (hit.size > 0) {
+      selected = null;
+      panel.classList.remove('open');
+      selectedSet = hit;
+      render();
+      showMultiAction();
+    } else {
+      clearMultiSelect();
+    }
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 // DUPLICATE
@@ -1067,13 +1227,11 @@ function loadJSON(event) {
   event.target.value = '';
 }
 
-// Click outside to deselect
-document.getElementById('canvas-wrap').addEventListener('click', e => {
+// Rubber-band select / click-to-deselect on canvas
+document.getElementById('canvas-wrap').addEventListener('mousedown', e => {
   if (e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg) {
-    selected = null; selectedCallout = null;
-    closePanel();
-    render();
-    canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
+    e.preventDefault();
+    startRubberBand(e);
   }
 });
 
