@@ -136,7 +136,7 @@
     font-family: inherit;
     cursor: text;
   }
-  .node-name:focus, .node-role:focus { background: #f9f8f5; border-radius: 3px; }
+  .node-name:focus, .node-role:focus { background: rgba(255,255,255,0.6); border-radius: 3px; }
 
   .node-actions {
     display: none;
@@ -151,7 +151,7 @@
     padding: 3px 8px;
     border-radius: 4px;
     border: 1px solid #e0ddd6;
-    background: #f5f5f3;
+    background: rgba(255,255,255,0.7);
     color: #555;
     cursor: pointer;
     font-family: inherit;
@@ -161,12 +161,104 @@
   .node-btn.del { color: #b33; border-color: #e0b0b0; }
   .node-btn.del:hover { background: #fff0f0; }
 
-  /* color pips */
+  /* color bar */
   .node-color-bar {
     height: 3px;
-    border-radius: 2px 2px 0 0;
     margin: -10px -14px 8px;
     border-radius: 6px 6px 0 0;
+  }
+
+  /* CALLOUTS */
+  .callout {
+    position: absolute;
+    background: #fffde7;
+    border: 1.5px solid #e6d84a;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    overflow: hidden;
+    user-select: none;
+  }
+  .callout.selected { border-color: #b0930a; box-shadow: 0 0 0 3px #fff0a0; }
+
+  .callout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    background: rgba(0,0,0,0.06);
+    cursor: grab;
+    flex-shrink: 0;
+    gap: 4px;
+  }
+  .callout-header:active { cursor: grabbing; }
+
+  .callout-color-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .callout-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    cursor: pointer;
+    border: 1.5px solid rgba(0,0,0,0.15);
+    transition: transform 0.1s;
+  }
+  .callout-dot:hover { transform: scale(1.2); }
+  .callout-dot.active { border-color: #333; }
+
+  .callout-del {
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #999;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .callout-del:hover { background: #ffcccc; color: #b33; }
+
+  .callout-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 0;
+  }
+
+  .callout-text {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    outline: none;
+    color: #333;
+    cursor: text;
+    width: 100%;
+    min-height: 60px;
+  }
+
+  .callout-resize {
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 14px; height: 14px;
+    cursor: se-resize;
+    z-index: 10;
+  }
+  .callout-resize::after {
+    content: '';
+    position: absolute;
+    bottom: 3px; right: 3px;
+    width: 6px; height: 6px;
+    border-right: 2px solid rgba(0,0,0,0.25);
+    border-bottom: 2px solid rgba(0,0,0,0.25);
   }
 
   /* PANEL */
@@ -220,6 +312,7 @@
   <input id="chart-title-input" value="My Org Chart" spellcheck="false" />
   <div class="sep"></div>
   <button class="primary" onclick="addRootNode()">+ Add node</button>
+  <button onclick="addCallout()">+ Callout</button>
   <button onclick="autoLayout()">Auto layout</button>
   <div class="sep"></div>
   <button onclick="zoomIn()">+</button>
@@ -250,8 +343,10 @@
   <input class="field-input" id="panel-name" placeholder="Name" oninput="updateSelectedNode()">
   <div class="field-label">Role / title</div>
   <input class="field-input" id="panel-role" placeholder="Role or title" oninput="updateSelectedNode()">
-  <div class="field-label">Color</div>
+  <div class="field-label">Accent color</div>
   <div class="color-swatches" id="panel-colors"></div>
+  <div class="field-label">Background</div>
+  <div class="color-swatches" id="panel-bg-colors"></div>
   <div style="margin-top: 20px; border-top: 1px solid #e0ddd6; padding-top: 14px; display:flex; flex-direction:column; gap:8px;">
     <button onclick="addChildToSelected()">+ Add child node</button>
     <button class="danger" onclick="deleteSelected()">Delete node</button>
@@ -270,20 +365,40 @@ const COLORS = [
   { name: 'pink',   bar: '#d4537e' },
 ];
 
+const BG_COLORS = [
+  { name: 'none',   bg: '#ffffff', display: '#f0ede4' },
+  { name: 'blue',   bg: '#e8f2fc', display: '#e8f2fc' },
+  { name: 'green',  bg: '#edf6dc', display: '#edf6dc' },
+  { name: 'amber',  bg: '#fef4e0', display: '#fef4e0' },
+  { name: 'coral',  bg: '#fdeee8', display: '#fdeee8' },
+  { name: 'purple', bg: '#eeedf9', display: '#eeedf9' },
+  { name: 'teal',   bg: '#e0f4ee', display: '#e0f4ee' },
+  { name: 'pink',   bg: '#fce9f0', display: '#fce9f0' },
+];
+
+const CALLOUT_COLORS = [
+  { name: 'yellow', bg: '#fffde7', header: '#f0e84a40', border: '#e6d84a' },
+  { name: 'blue',   bg: '#e8f2fc', header: '#378add30', border: '#8dbfe8' },
+  { name: 'green',  bg: '#edf6dc', header: '#63992230', border: '#9ec95a' },
+  { name: 'pink',   bg: '#fce9f0', header: '#d4537e30', border: '#e89bba' },
+  { name: 'purple', bg: '#eeedf9', header: '#7f77dd30', border: '#b0acec' },
+  { name: 'white',  bg: '#ffffff', header: '#00000010', border: '#d4d1c8' },
+];
+
 let nodes = [];
-let edges = [];
+let callouts = [];
 let selected = null;
+let selectedCallout = null;
 let zoom = 1;
 let nodeCounter = 0;
-let dragState = null;
-let panState = null;
+let calloutCounter = 0;
 
 const canvas = document.getElementById('canvas');
 const svg = document.getElementById('lines');
 const panel = document.getElementById('panel');
 const empty = document.getElementById('empty');
 
-// Build color swatches
+// Build accent color swatches
 const swatchContainer = document.getElementById('panel-colors');
 COLORS.forEach(c => {
   const s = document.createElement('div');
@@ -295,13 +410,26 @@ COLORS.forEach(c => {
   swatchContainer.appendChild(s);
 });
 
+// Build background color swatches
+const bgSwatchContainer = document.getElementById('panel-bg-colors');
+BG_COLORS.forEach(c => {
+  const s = document.createElement('div');
+  s.className = 'swatch' + (c.name === 'none' ? ' active' : '');
+  s.style.background = c.display;
+  s.style.border = c.name === 'none' ? '2px solid #ccc' : '2px solid transparent';
+  s.dataset.bgColor = c.name;
+  s.onclick = () => setSelectedBgColor(c.name);
+  bgSwatchContainer.appendChild(s);
+});
+
 function uid() { return 'n' + (++nodeCounter); }
+function cuid() { return 'c' + (++calloutCounter); }
 
 function addRootNode() {
   const x = 60 + Math.random() * 300;
   const y = 60 + Math.random() * 200;
   const id = uid();
-  nodes.push({ id, name: 'New Node', role: '', x: Math.round(x), y: Math.round(y), color: 'none', parentId: null });
+  nodes.push({ id, name: 'New Node', role: '', x: Math.round(x), y: Math.round(y), color: 'none', bgColor: 'none', parentId: null });
   render();
   selectNode(id);
 }
@@ -311,9 +439,20 @@ function addChildToSelected() {
   const parent = nodes.find(n => n.id === selected);
   if (!parent) return;
   const id = uid();
-  nodes.push({ id, name: 'New Node', role: '', x: parent.x + 60, y: parent.y + 120, color: parent.color, parentId: parent.id });
+  nodes.push({ id, name: 'New Node', role: '', x: parent.x + 60, y: parent.y + 120, color: parent.color, bgColor: parent.bgColor, parentId: parent.id });
   render();
   selectNode(id);
+}
+
+function addCallout() {
+  const wrap = document.getElementById('canvas-wrap');
+  const x = wrap.scrollLeft + 80 + Math.random() * 200;
+  const y = wrap.scrollTop + 80 + Math.random() * 120;
+  const id = cuid();
+  callouts.push({ id, x: Math.round(x), y: Math.round(y), w: 180, h: 120, text: 'Note...', color: 'yellow' });
+  renderCallouts();
+  expandCanvas();
+  selectCallout(id);
 }
 
 function deleteSelected() {
@@ -331,22 +470,37 @@ function removeNodeAndDescendants(id) {
 }
 
 function clearAll() {
-  if (!confirm('Clear all nodes?')) return;
-  nodes = []; edges = []; selected = null;
-  closePanel(); render();
+  if (!confirm('Clear all nodes and callouts?')) return;
+  nodes = []; callouts = []; selected = null; selectedCallout = null;
+  closePanel(); render(); renderCallouts();
 }
 
 function selectNode(id) {
+  selectedCallout = null;
+  canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
   selected = id;
   const node = nodes.find(n => n.id === id);
   if (!node) return;
   document.getElementById('panel-name').value = node.name;
   document.getElementById('panel-role').value = node.role;
-  document.querySelectorAll('.swatch').forEach(s => {
+  document.querySelectorAll('#panel-colors .swatch').forEach(s => {
     s.classList.toggle('active', s.dataset.color === node.color);
+  });
+  document.querySelectorAll('#panel-bg-colors .swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.bgColor === (node.bgColor || 'none'));
   });
   panel.classList.add('open');
   render();
+}
+
+function selectCallout(id) {
+  selected = null;
+  panel.classList.remove('open');
+  canvas.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
+  selectedCallout = id;
+  canvas.querySelectorAll('.callout').forEach(el => {
+    el.classList.toggle('selected', el.dataset.cid === id);
+  });
 }
 
 function closePanel() {
@@ -369,8 +523,19 @@ function setSelectedColor(colorName) {
   const node = nodes.find(n => n.id === selected);
   if (!node) return;
   node.color = colorName;
-  document.querySelectorAll('.swatch').forEach(s => {
+  document.querySelectorAll('#panel-colors .swatch').forEach(s => {
     s.classList.toggle('active', s.dataset.color === colorName);
+  });
+  render();
+}
+
+function setSelectedBgColor(colorName) {
+  if (!selected) return;
+  const node = nodes.find(n => n.id === selected);
+  if (!node) return;
+  node.bgColor = colorName;
+  document.querySelectorAll('#panel-bg-colors .swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.bgColor === colorName);
   });
   render();
 }
@@ -379,8 +544,12 @@ function getColorBar(colorName) {
   return COLORS.find(c => c.name === colorName)?.bar || 'transparent';
 }
 
+function getNodeBg(bgColorName) {
+  return BG_COLORS.find(c => c.name === bgColorName)?.bg || '#ffffff';
+}
+
 function render() {
-  empty.style.display = nodes.length === 0 ? 'block' : 'none';
+  empty.style.display = nodes.length === 0 && callouts.length === 0 ? 'block' : 'none';
 
   const existing = {};
   canvas.querySelectorAll('.node').forEach(el => existing[el.dataset.id] = el);
@@ -395,6 +564,7 @@ function render() {
     }
     el.style.left = node.x + 'px';
     el.style.top = node.y + 'px';
+    el.style.background = getNodeBg(node.bgColor || 'none');
     el.classList.toggle('selected', node.id === selected);
     el.querySelector('.node-name').value = node.name;
     el.querySelector('.node-role').value = node.role;
@@ -409,6 +579,156 @@ function render() {
 
   drawLines();
   expandCanvas();
+}
+
+function renderCallouts() {
+  empty.style.display = nodes.length === 0 && callouts.length === 0 ? 'block' : 'none';
+
+  const existingC = {};
+  canvas.querySelectorAll('.callout').forEach(el => existingC[el.dataset.cid] = el);
+
+  const seenC = new Set();
+  callouts.forEach(co => {
+    seenC.add(co.id);
+    let el = existingC[co.id];
+    if (!el) {
+      el = createCalloutEl(co);
+      canvas.appendChild(el);
+    }
+    el.style.left = co.x + 'px';
+    el.style.top = co.y + 'px';
+    el.style.width = co.w + 'px';
+    el.style.height = co.h + 'px';
+    el.classList.toggle('selected', co.id === selectedCallout);
+    applyCalloutColor(el, co.color);
+    el.querySelector('.callout-text').value = co.text;
+  });
+
+  Object.keys(existingC).forEach(id => {
+    if (!seenC.has(id)) existingC[id].remove();
+  });
+
+  expandCanvas();
+}
+
+function applyCalloutColor(el, colorName) {
+  const c = CALLOUT_COLORS.find(x => x.name === colorName) || CALLOUT_COLORS[0];
+  el.style.background = c.bg;
+  el.style.borderColor = c.border;
+  const header = el.querySelector('.callout-header');
+  if (header) header.style.background = c.header;
+  // update active dot
+  el.querySelectorAll('.callout-dot').forEach(d => {
+    d.classList.toggle('active', d.dataset.cc === colorName);
+  });
+}
+
+function createCalloutEl(co) {
+  const el = document.createElement('div');
+  el.className = 'callout';
+  el.dataset.cid = co.id;
+
+  const dotsHtml = CALLOUT_COLORS.map(c =>
+    `<div class="callout-dot${c.name === co.color ? ' active' : ''}" data-cc="${c.name}" style="background:${c.bg};border-color:${c.border}" title="${c.name}"></div>`
+  ).join('');
+
+  el.innerHTML = `
+    <div class="callout-header">
+      <div class="callout-color-dots">${dotsHtml}</div>
+      <button class="callout-del" title="Delete">✕</button>
+    </div>
+    <div class="callout-body">
+      <textarea class="callout-text" placeholder="Add a note...">${esc(co.text)}</textarea>
+      <div class="callout-resize"></div>
+    </div>
+  `;
+
+  // drag from header
+  el.querySelector('.callout-header').addEventListener('mousedown', e => {
+    if (e.target.classList.contains('callout-del') || e.target.classList.contains('callout-dot')) return;
+    e.preventDefault();
+    selectCallout(co.id);
+    startCalloutDrag(e, co, el);
+  });
+
+  // color dots
+  el.querySelectorAll('.callout-dot').forEach(dot => {
+    dot.addEventListener('click', e => {
+      e.stopPropagation();
+      co.color = dot.dataset.cc;
+      applyCalloutColor(el, co.color);
+      selectCallout(co.id);
+    });
+  });
+
+  // delete
+  el.querySelector('.callout-del').addEventListener('click', e => {
+    e.stopPropagation();
+    callouts = callouts.filter(c => c.id !== co.id);
+    el.remove();
+    if (selectedCallout === co.id) selectedCallout = null;
+    empty.style.display = nodes.length === 0 && callouts.length === 0 ? 'block' : 'none';
+  });
+
+  // resize
+  el.querySelector('.callout-resize').addEventListener('mousedown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectCallout(co.id);
+    startCalloutResize(e, co, el);
+  });
+
+  // textarea — sync text, prevent drag propagation
+  const ta = el.querySelector('.callout-text');
+  ta.addEventListener('input', () => { co.text = ta.value; });
+  ta.addEventListener('mousedown', e => e.stopPropagation());
+  ta.addEventListener('focus', () => selectCallout(co.id));
+
+  el.addEventListener('mousedown', e => {
+    if (e.target === el) selectCallout(co.id);
+  });
+
+  return el;
+}
+
+function startCalloutDrag(e, co, el) {
+  const startX = e.clientX, startY = e.clientY;
+  const startCX = co.x, startCY = co.y;
+  el.style.cursor = 'grabbing';
+
+  function onMove(ev) {
+    co.x = Math.round(startCX + (ev.clientX - startX) / zoom);
+    co.y = Math.round(startCY + (ev.clientY - startY) / zoom);
+    el.style.left = co.x + 'px';
+    el.style.top = co.y + 'px';
+    expandCanvas();
+  }
+  function onUp() {
+    el.style.cursor = '';
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startCalloutResize(e, co, el) {
+  const startX = e.clientX, startY = e.clientY;
+  const startW = co.w, startH = co.h;
+
+  function onMove(ev) {
+    co.w = Math.max(120, Math.round(startW + (ev.clientX - startX) / zoom));
+    co.h = Math.max(80, Math.round(startH + (ev.clientY - startY) / zoom));
+    el.style.width = co.w + 'px';
+    el.style.height = co.h + 'px';
+    expandCanvas();
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function createNodeEl(node) {
@@ -470,7 +790,6 @@ function drawLines() {
     const cy = node.y;
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const mx = (px + cx) / 2;
     const my = (py + cy) / 2;
     path.setAttribute('d', `M ${px} ${py} C ${px} ${my}, ${cx} ${my}, ${cx} ${cy}`);
     path.setAttribute('stroke', '#bbb');
@@ -489,11 +808,15 @@ function expandCanvas() {
       maxY = Math.max(maxY, n.y + el.offsetHeight + 80);
     }
   });
+  callouts.forEach(co => {
+    maxX = Math.max(maxX, co.x + co.w + 80);
+    maxY = Math.max(maxY, co.y + co.h + 80);
+  });
   canvas.style.width = maxX + 'px';
   canvas.style.height = maxY + 'px';
 }
 
-// DRAG
+// DRAG (nodes)
 function startDrag(e, nodeId) {
   e.preventDefault();
   const node = nodes.find(n => n.id === nodeId);
@@ -501,11 +824,8 @@ function startDrag(e, nodeId) {
   el.classList.add('dragging');
   selectNode(nodeId);
 
-  const wrap = document.getElementById('canvas-wrap');
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const startNodeX = node.x;
-  const startNodeY = node.y;
+  const startX = e.clientX, startY = e.clientY;
+  const startNodeX = node.x, startNodeY = node.y;
 
   function onMove(ev) {
     const dx = (ev.clientX - startX) / zoom;
@@ -538,14 +858,12 @@ function zoomIn() { zoom = Math.min(zoom + 0.1, 2); applyZoom(); }
 function zoomOut() { zoom = Math.max(zoom - 0.1, 0.3); applyZoom(); }
 function resetZoom() { zoom = 1; applyZoom(); }
 
-// AUTO LAYOUT (top-down tree)
+// AUTO LAYOUT
 function autoLayout() {
   const roots = nodes.filter(n => !n.parentId);
   if (roots.length === 0) return;
 
-  const HGAP = 40;
-  const VGAP = 100;
-  const NODE_W = 160;
+  const HGAP = 40, VGAP = 100, NODE_W = 160;
 
   function subtreeWidth(id) {
     const children = nodes.filter(n => n.parentId === id);
@@ -579,7 +897,6 @@ function autoLayout() {
 
 // EXPORT PNG
 function exportPNG() {
-  const wrap = document.getElementById('canvas-wrap');
   const bounds = { w: parseInt(canvas.style.width)||400, h: parseInt(canvas.style.height)||400 };
   const prevZoom = zoom; zoom = 1; applyZoom();
 
@@ -599,7 +916,10 @@ function exportPNG() {
 
 // SAVE / LOAD JSON
 function saveJSON() {
-  const data = JSON.stringify({ title: document.getElementById('chart-title-input').value, nodes, nodeCounter }, null, 2);
+  const data = JSON.stringify({
+    title: document.getElementById('chart-title-input').value,
+    nodes, nodeCounter, callouts, calloutCounter
+  }, null, 2);
   const a = document.createElement('a');
   a.href = 'data:application/json,' + encodeURIComponent(data);
   a.download = (document.getElementById('chart-title-input').value || 'orgchart') + '.json';
@@ -615,10 +935,13 @@ function loadJSON(event) {
       const data = JSON.parse(e.target.result);
       nodes = data.nodes || [];
       nodeCounter = data.nodeCounter || nodes.length;
+      callouts = data.callouts || [];
+      calloutCounter = data.calloutCounter || callouts.length;
       if (data.title) document.getElementById('chart-title-input').value = data.title;
-      selected = null;
+      selected = null; selectedCallout = null;
       closePanel();
       render();
+      renderCallouts();
     } catch { alert('Invalid JSON file.'); }
   };
   reader.readAsText(file);
@@ -628,11 +951,15 @@ function loadJSON(event) {
 // Click outside to deselect
 document.getElementById('canvas-wrap').addEventListener('click', e => {
   if (e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg) {
-    selected = null; closePanel(); render();
+    selected = null; selectedCallout = null;
+    closePanel();
+    render();
+    canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
   }
 });
 
 render();
+renderCallouts();
 </script>
 </body>
 </html>
