@@ -1068,14 +1068,53 @@ function drawLines() {
     const cx = node.x + cEl.offsetWidth / 2;
     const cy = node.y;
 
+    const d = computeEdgePath(px, py, cx, cy, node.id, parent.id);
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const my = (py + cy) / 2;
-    path.setAttribute('d', `M ${px} ${py} C ${px} ${my}, ${cx} ${my}, ${cx} ${cy}`);
+    path.setAttribute('d', d);
     path.setAttribute('stroke', '#bbb');
     path.setAttribute('stroke-width', '1.5');
     path.setAttribute('fill', 'none');
     svg.appendChild(path);
   });
+}
+
+function computeEdgePath(px, py, cx, cy, skipId, skipParentId) {
+  const MARGIN = 8;
+  const R = 6;
+
+  let midY = (py + cy) / 2;
+  const minX = Math.min(px, cx) - MARGIN;
+  const maxX = Math.max(px, cx) + MARGIN;
+
+  // Shift midY upward until the horizontal segment clears all nodes
+  for (let iter = 0; iter < 12; iter++) {
+    let blocked = null;
+    for (const n of nodes) {
+      if (n.id === skipId || n.id === skipParentId) continue;
+      const el = canvas.querySelector(`[data-id="${n.id}"]`);
+      if (!el) continue;
+      const nT = n.y - MARGIN, nB = n.y + el.offsetHeight + MARGIN;
+      const nL = n.x - MARGIN, nR = n.x + el.offsetWidth + MARGIN;
+      if (midY > nT && midY < nB && minX < nR && maxX > nL) {
+        blocked = nT;
+        break;
+      }
+    }
+    if (blocked === null) break;
+    midY = blocked - 2;
+  }
+
+  if (Math.abs(cx - px) < 2) return `M ${px} ${py} L ${cx} ${cy}`;
+
+  const dir = cx > px ? 1 : -1;
+  return [
+    `M ${px} ${py}`,
+    `L ${px} ${midY - R}`,
+    `Q ${px} ${midY} ${px + dir * R} ${midY}`,
+    `L ${cx - dir * R} ${midY}`,
+    `Q ${cx} ${midY} ${cx} ${midY + R}`,
+    `L ${cx} ${cy}`,
+  ].join(' ');
 }
 
 function expandCanvas() {
@@ -1095,6 +1134,38 @@ function expandCanvas() {
   canvas.style.height = maxY + 'px';
 }
 
+// SNAPPING
+const SNAP_GRID = 10;
+const SNAP_GAP = 8;
+const SNAP_THRESH = 14;
+
+function snapPos(rawX, rawY, movingId) {
+  const el = canvas.querySelector(`[data-id="${movingId}"]`);
+  const w = el ? el.offsetWidth : 160;
+  const h = el ? el.offsetHeight : 60;
+
+  let bx = { val: Math.round(rawX / SNAP_GRID) * SNAP_GRID, dist: SNAP_THRESH + 1 };
+  let by = { val: Math.round(rawY / SNAP_GRID) * SNAP_GRID, dist: SNAP_THRESH + 1 };
+
+  nodes.forEach(other => {
+    if (other.id === movingId) return;
+    const oEl = canvas.querySelector(`[data-id="${other.id}"]`);
+    if (!oEl) return;
+    const ow = oEl.offsetWidth, oh = oEl.offsetHeight;
+
+    [other.x + ow + SNAP_GAP, other.x - w - SNAP_GAP, other.x + (ow - w) / 2].forEach(c => {
+      const d = Math.abs(rawX - c);
+      if (d < SNAP_THRESH && d < bx.dist) bx = { val: c, dist: d };
+    });
+    [other.y + oh + SNAP_GAP, other.y - h - SNAP_GAP, other.y + (oh - h) / 2].forEach(c => {
+      const d = Math.abs(rawY - c);
+      if (d < SNAP_THRESH && d < by.dist) by = { val: c, dist: d };
+    });
+  });
+
+  return { x: Math.round(bx.val), y: Math.round(by.val) };
+}
+
 // DRAG (nodes)
 function startDrag(e, nodeId) {
   e.preventDefault();
@@ -1107,10 +1178,11 @@ function startDrag(e, nodeId) {
   const startNodeX = node.x, startNodeY = node.y;
 
   function onMove(ev) {
-    const dx = (ev.clientX - startX) / zoom;
-    const dy = (ev.clientY - startY) / zoom;
-    node.x = Math.round(startNodeX + dx);
-    node.y = Math.round(startNodeY + dy);
+    const rawX = startNodeX + (ev.clientX - startX) / zoom;
+    const rawY = startNodeY + (ev.clientY - startY) / zoom;
+    const snapped = snapPos(rawX, rawY, nodeId);
+    node.x = snapped.x;
+    node.y = snapped.y;
     el.style.left = node.x + 'px';
     el.style.top = node.y + 'px';
     drawLines();
