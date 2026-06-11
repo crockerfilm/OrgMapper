@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Org Chart Builder</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f3;
+    color: #1a1a18;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* TOOLBAR */
+  #toolbar {
+    background: #fff;
+    border-bottom: 1px solid #e0ddd6;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  #toolbar h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a18;
+    margin-right: 4px;
+  }
+
+  .sep { width: 1px; height: 24px; background: #e0ddd6; }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #d4d1c8;
+    background: #fff;
+    color: #1a1a18;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  button:hover { background: #f5f5f3; }
+  button.primary {
+    background: #1a1a18;
+    color: #fff;
+    border-color: #1a1a18;
+  }
+  button.primary:hover { background: #333; }
+  button.danger { color: #b33; border-color: #e0b0b0; }
+  button.danger:hover { background: #fff0f0; }
+
+  #chart-title-input {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: #1a1a18;
+    outline: none;
+    min-width: 120px;
+    max-width: 220px;
+  }
+  #chart-title-input:focus { border-bottom: 1.5px solid #888; }
+
+  /* CANVAS */
+  #canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+
+  #canvas {
+    position: relative;
+    min-width: 100%;
+    min-height: 100%;
+  }
+
+  svg#lines {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* NODES */
+  .node {
+    position: absolute;
+    background: #fff;
+    border: 1.5px solid #d4d1c8;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 140px;
+    max-width: 200px;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .node:hover { border-color: #aaa; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .node.selected { border-color: #3b6d11; box-shadow: 0 0 0 3px #d4e9b8; }
+  .node.dragging { box-shadow: 0 6px 20px rgba(0,0,0,0.15); opacity: 0.92; cursor: grabbing; z-index: 1000; }
+
+  .node-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a18;
+    outline: none;
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    cursor: text;
+  }
+  .node-role {
+    font-size: 11px;
+    color: #888780;
+    margin-top: 2px;
+    outline: none;
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    cursor: text;
+  }
+  .node-name:focus, .node-role:focus { background: #f9f8f5; border-radius: 3px; }
+
+  .node-actions {
+    display: none;
+    margin-top: 8px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .node:hover .node-actions, .node.selected .node-actions { display: flex; }
+
+  .node-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #e0ddd6;
+    background: #f5f5f3;
+    color: #555;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+  .node-btn:hover { background: #e8e5dc; }
+  .node-btn.del { color: #b33; border-color: #e0b0b0; }
+  .node-btn.del:hover { background: #fff0f0; }
+
+  /* color pips */
+  .node-color-bar {
+    height: 3px;
+    border-radius: 2px 2px 0 0;
+    margin: -10px -14px 8px;
+    border-radius: 6px 6px 0 0;
+  }
+
+  /* PANEL */
+  #panel {
+    position: fixed;
+    right: 0; top: 0; bottom: 0;
+    width: 240px;
+    background: #fff;
+    border-left: 1px solid #e0ddd6;
+    padding: 16px;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.2s;
+    z-index: 500;
+  }
+  #panel.open { transform: translateX(0); }
+
+  #panel h2 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  .field-label { font-size: 12px; color: #888; margin-bottom: 4px; margin-top: 12px; }
+  .field-input {
+    width: 100%; font-family: inherit; font-size: 13px;
+    border: 1px solid #d4d1c8; border-radius: 6px;
+    padding: 6px 8px; background: #fff; color: #1a1a18; outline: none;
+  }
+  .field-input:focus { border-color: #888; }
+
+  .color-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; transition: border-color 0.1s;
+  }
+  .swatch.active { border-color: #333; }
+
+  /* EMPTY STATE */
+  #empty {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center; color: #aaa; pointer-events: none;
+  }
+  #empty p { font-size: 14px; margin-top: 6px; }
+
+  /* ZOOM */
+  #zoom-display { font-size: 12px; color: #888; min-width: 36px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>&#9660;</h1>
+  <input id="chart-title-input" value="My Org Chart" spellcheck="false" />
+  <div class="sep"></div>
+  <button class="primary" onclick="addRootNode()">+ Add node</button>
+  <button onclick="autoLayout()">Auto layout</button>
+  <div class="sep"></div>
+  <button onclick="zoomIn()">+</button>
+  <span id="zoom-display">100%</span>
+  <button onclick="zoomOut()">−</button>
+  <button onclick="resetZoom()">Fit</button>
+  <div class="sep"></div>
+  <button onclick="exportPNG()">Export PNG</button>
+  <button onclick="saveJSON()">Save</button>
+  <button onclick="document.getElementById('load-input').click()">Load</button>
+  <input id="load-input" type="file" accept=".json" style="display:none" onchange="loadJSON(event)">
+  <button class="danger" onclick="clearAll()">Clear</button>
+</div>
+
+<div id="canvas-wrap">
+  <div id="canvas">
+    <svg id="lines"></svg>
+    <div id="empty">
+      <div style="font-size:36px">&#9651;</div>
+      <p>Click <strong>+ Add node</strong> to start building your tree</p>
+    </div>
+  </div>
+</div>
+
+<div id="panel">
+  <h2>Node</h2>
+  <div class="field-label">Name</div>
+  <input class="field-input" id="panel-name" placeholder="Name" oninput="updateSelectedNode()">
+  <div class="field-label">Role / title</div>
+  <input class="field-input" id="panel-role" placeholder="Role or title" oninput="updateSelectedNode()">
+  <div class="field-label">Color</div>
+  <div class="color-swatches" id="panel-colors"></div>
+  <div style="margin-top: 20px; border-top: 1px solid #e0ddd6; padding-top: 14px; display:flex; flex-direction:column; gap:8px;">
+    <button onclick="addChildToSelected()">+ Add child node</button>
+    <button class="danger" onclick="deleteSelected()">Delete node</button>
+  </div>
+</div>
+
+<script>
+const COLORS = [
+  { name: 'none',   bar: 'transparent' },
+  { name: 'blue',   bar: '#378add' },
+  { name: 'green',  bar: '#639922' },
+  { name: 'amber',  bar: '#ef9f27' },
+  { name: 'coral',  bar: '#d85a30' },
+  { name: 'purple', bar: '#7f77dd' },
+  { name: 'teal',   bar: '#1d9e75' },
+  { name: 'pink',   bar: '#d4537e' },
+];
+
+let nodes = [];
+let edges = [];
+let selected = null;
+let zoom = 1;
+let nodeCounter = 0;
+let dragState = null;
+let panState = null;
+
+const canvas = document.getElementById('canvas');
+const svg = document.getElementById('lines');
+const panel = document.getElementById('panel');
+const empty = document.getElementById('empty');
+
+// Build color swatches
+const swatchContainer = document.getElementById('panel-colors');
+COLORS.forEach(c => {
+  const s = document.createElement('div');
+  s.className = 'swatch' + (c.name === 'none' ? ' active' : '');
+  s.style.background = c.bar === 'transparent' ? '#f0ede4' : c.bar;
+  s.style.border = c.name === 'none' ? '2px solid #ccc' : '';
+  s.dataset.color = c.name;
+  s.onclick = () => setSelectedColor(c.name);
+  swatchContainer.appendChild(s);
+});
+
+function uid() { return 'n' + (++nodeCounter); }
+
+function addRootNode() {
+  const x = 60 + Math.random() * 300;
+  const y = 60 + Math.random() * 200;
+  const id = uid();
+  nodes.push({ id, name: 'New Node', role: '', x: Math.round(x), y: Math.round(y), color: 'none', parentId: null });
+  render();
+  selectNode(id);
+}
+
+function addChildToSelected() {
+  if (!selected) return;
+  const parent = nodes.find(n => n.id === selected);
+  if (!parent) return;
+  const id = uid();
+  nodes.push({ id, name: 'New Node', role: '', x: parent.x + 60, y: parent.y + 120, color: parent.color, parentId: parent.id });
+  render();
+  selectNode(id);
+}
+
+function deleteSelected() {
+  if (!selected) return;
+  removeNodeAndDescendants(selected);
+  selected = null;
+  closePanel();
+  render();
+}
+
+function removeNodeAndDescendants(id) {
+  const children = nodes.filter(n => n.parentId === id).map(n => n.id);
+  children.forEach(cid => removeNodeAndDescendants(cid));
+  nodes = nodes.filter(n => n.id !== id);
+}
+
+function clearAll() {
+  if (!confirm('Clear all nodes?')) return;
+  nodes = []; edges = []; selected = null;
+  closePanel(); render();
+}
+
+function selectNode(id) {
+  selected = id;
+  const node = nodes.find(n => n.id === id);
+  if (!node) return;
+  document.getElementById('panel-name').value = node.name;
+  document.getElementById('panel-role').value = node.role;
+  document.querySelectorAll('.swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.color === node.color);
+  });
+  panel.classList.add('open');
+  render();
+}
+
+function closePanel() {
+  panel.classList.remove('open');
+  selected = null;
+  render();
+}
+
+function updateSelectedNode() {
+  if (!selected) return;
+  const node = nodes.find(n => n.id === selected);
+  if (!node) return;
+  node.name = document.getElementById('panel-name').value;
+  node.role = document.getElementById('panel-role').value;
+  render();
+}
+
+function setSelectedColor(colorName) {
+  if (!selected) return;
+  const node = nodes.find(n => n.id === selected);
+  if (!node) return;
+  node.color = colorName;
+  document.querySelectorAll('.swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.color === colorName);
+  });
+  render();
+}
+
+function getColorBar(colorName) {
+  return COLORS.find(c => c.name === colorName)?.bar || 'transparent';
+}
+
+function render() {
+  empty.style.display = nodes.length === 0 ? 'block' : 'none';
+
+  const existing = {};
+  canvas.querySelectorAll('.node').forEach(el => existing[el.dataset.id] = el);
+
+  const seen = new Set();
+  nodes.forEach(node => {
+    seen.add(node.id);
+    let el = existing[node.id];
+    if (!el) {
+      el = createNodeEl(node);
+      canvas.appendChild(el);
+    }
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    el.classList.toggle('selected', node.id === selected);
+    el.querySelector('.node-name').value = node.name;
+    el.querySelector('.node-role').value = node.role;
+    const bar = el.querySelector('.node-color-bar');
+    bar.style.background = getColorBar(node.color);
+    bar.style.display = node.color === 'none' ? 'none' : 'block';
+  });
+
+  Object.keys(existing).forEach(id => {
+    if (!seen.has(id)) existing[id].remove();
+  });
+
+  drawLines();
+  expandCanvas();
+}
+
+function createNodeEl(node) {
+  const el = document.createElement('div');
+  el.className = 'node';
+  el.dataset.id = node.id;
+  el.innerHTML = `
+    <div class="node-color-bar"></div>
+    <input class="node-name" value="${esc(node.name)}" placeholder="Name" />
+    <input class="node-role" value="${esc(node.role)}" placeholder="Role" />
+    <div class="node-actions">
+      <button class="node-btn" data-action="add-child">+ Child</button>
+      <button class="node-btn del" data-action="delete">Delete</button>
+    </div>
+  `;
+
+  el.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    startDrag(e, node.id);
+  });
+
+  el.querySelector('.node-name').addEventListener('input', e => {
+    node.name = e.target.value;
+    drawLines();
+  });
+  el.querySelector('.node-role').addEventListener('input', e => {
+    node.role = e.target.value;
+  });
+  el.querySelector('.node-name').addEventListener('focus', () => selectNode(node.id));
+  el.querySelector('.node-role').addEventListener('focus', () => selectNode(node.id));
+
+  el.addEventListener('click', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.target.dataset.action === 'add-child') { selectNode(node.id); addChildToSelected(); return; }
+    if (e.target.dataset.action === 'delete') { selectNode(node.id); deleteSelected(); return; }
+    selectNode(node.id);
+  });
+
+  return el;
+}
+
+function esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function drawLines() {
+  svg.innerHTML = '';
+  nodes.forEach(node => {
+    if (!node.parentId) return;
+    const parent = nodes.find(n => n.id === node.parentId);
+    if (!parent) return;
+    const pEl = canvas.querySelector(`[data-id="${parent.id}"]`);
+    const cEl = canvas.querySelector(`[data-id="${node.id}"]`);
+    if (!pEl || !cEl) return;
+
+    const px = parent.x + pEl.offsetWidth / 2;
+    const py = parent.y + pEl.offsetHeight;
+    const cx = node.x + cEl.offsetWidth / 2;
+    const cy = node.y;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const mx = (px + cx) / 2;
+    const my = (py + cy) / 2;
+    path.setAttribute('d', `M ${px} ${py} C ${px} ${my}, ${cx} ${my}, ${cx} ${cy}`);
+    path.setAttribute('stroke', '#bbb');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('fill', 'none');
+    svg.appendChild(path);
+  });
+}
+
+function expandCanvas() {
+  let maxX = 400, maxY = 400;
+  nodes.forEach(n => {
+    const el = canvas.querySelector(`[data-id="${n.id}"]`);
+    if (el) {
+      maxX = Math.max(maxX, n.x + el.offsetWidth + 80);
+      maxY = Math.max(maxY, n.y + el.offsetHeight + 80);
+    }
+  });
+  canvas.style.width = maxX + 'px';
+  canvas.style.height = maxY + 'px';
+}
+
+// DRAG
+function startDrag(e, nodeId) {
+  e.preventDefault();
+  const node = nodes.find(n => n.id === nodeId);
+  const el = canvas.querySelector(`[data-id="${nodeId}"]`);
+  el.classList.add('dragging');
+  selectNode(nodeId);
+
+  const wrap = document.getElementById('canvas-wrap');
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const startNodeX = node.x;
+  const startNodeY = node.y;
+
+  function onMove(ev) {
+    const dx = (ev.clientX - startX) / zoom;
+    const dy = (ev.clientY - startY) / zoom;
+    node.x = Math.round(startNodeX + dx);
+    node.y = Math.round(startNodeY + dy);
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    drawLines();
+    expandCanvas();
+  }
+
+  function onUp() {
+    el.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ZOOM
+function applyZoom() {
+  canvas.style.transform = `scale(${zoom})`;
+  canvas.style.transformOrigin = '0 0';
+  document.getElementById('zoom-display').textContent = Math.round(zoom * 100) + '%';
+}
+function zoomIn() { zoom = Math.min(zoom + 0.1, 2); applyZoom(); }
+function zoomOut() { zoom = Math.max(zoom - 0.1, 0.3); applyZoom(); }
+function resetZoom() { zoom = 1; applyZoom(); }
+
+// AUTO LAYOUT (top-down tree)
+function autoLayout() {
+  const roots = nodes.filter(n => !n.parentId);
+  if (roots.length === 0) return;
+
+  const HGAP = 40;
+  const VGAP = 100;
+  const NODE_W = 160;
+
+  function subtreeWidth(id) {
+    const children = nodes.filter(n => n.parentId === id);
+    if (children.length === 0) return NODE_W;
+    return children.reduce((sum, c) => sum + subtreeWidth(c.id), 0) + HGAP * (children.length - 1);
+  }
+
+  function place(id, x, y) {
+    const node = nodes.find(n => n.id === id);
+    const children = nodes.filter(n => n.parentId === id);
+    const totalW = subtreeWidth(id);
+    node.x = Math.round(x + totalW / 2 - NODE_W / 2);
+    node.y = y;
+    let cx = x;
+    children.forEach(c => {
+      const cw = subtreeWidth(c.id);
+      place(c.id, cx, y + VGAP + 60);
+      cx += cw + HGAP;
+    });
+  }
+
+  let xCursor = 60;
+  roots.forEach(r => {
+    const w = subtreeWidth(r.id);
+    place(r.id, xCursor, 60);
+    xCursor += w + 80;
+  });
+
+  render();
+}
+
+// EXPORT PNG
+function exportPNG() {
+  const wrap = document.getElementById('canvas-wrap');
+  const bounds = { w: parseInt(canvas.style.width)||400, h: parseInt(canvas.style.height)||400 };
+  const prevZoom = zoom; zoom = 1; applyZoom();
+
+  import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js').then(() => {
+    html2canvas(canvas, { backgroundColor: '#f5f5f3', scale: 2, width: bounds.w, height: bounds.h }).then(c => {
+      const a = document.createElement('a');
+      a.href = c.toDataURL();
+      a.download = (document.getElementById('chart-title-input').value || 'orgchart') + '.png';
+      a.click();
+      zoom = prevZoom; applyZoom();
+    });
+  }).catch(() => {
+    alert('PNG export requires html2canvas. Try Save (JSON) instead.');
+    zoom = prevZoom; applyZoom();
+  });
+}
+
+// SAVE / LOAD JSON
+function saveJSON() {
+  const data = JSON.stringify({ title: document.getElementById('chart-title-input').value, nodes, nodeCounter }, null, 2);
+  const a = document.createElement('a');
+  a.href = 'data:application/json,' + encodeURIComponent(data);
+  a.download = (document.getElementById('chart-title-input').value || 'orgchart') + '.json';
+  a.click();
+}
+
+function loadJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      nodes = data.nodes || [];
+      nodeCounter = data.nodeCounter || nodes.length;
+      if (data.title) document.getElementById('chart-title-input').value = data.title;
+      selected = null;
+      closePanel();
+      render();
+    } catch { alert('Invalid JSON file.'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// Click outside to deselect
+document.getElementById('canvas-wrap').addEventListener('click', e => {
+  if (e.target === document.getElementById('canvas-wrap') || e.target === canvas || e.target === svg) {
+    selected = null; closePanel(); render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
