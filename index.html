@@ -56,7 +56,8 @@
   #chart-title-input:focus { border-bottom: 1.5px solid var(--text2); }
 
   /* CANVAS */
-  #canvas-wrap { flex: 1; overflow: auto; position: relative; }
+  #canvas-wrap { flex: 1; overflow: auto; position: relative; transition: margin-right 0.2s; }
+  body.panel-open #canvas-wrap { margin-right: 240px; }
   #canvas {
     position: relative; min-width: 100%; min-height: 100%;
     background-image: radial-gradient(circle, var(--grid-dot) 1px, transparent 1px);
@@ -281,7 +282,7 @@
   <div class="color-swatches" id="panel-colors"></div>
   <div class="field-label">Background</div>
   <div class="color-swatches" id="panel-bg-colors"></div>
-  <div style="margin-top: 20px; border-top: 1px solid #e0ddd6; padding-top: 14px; display:flex; flex-direction:column; gap:8px;">
+  <div style="margin-top: 20px; border-top: 1px solid var(--border2); padding-top: 14px; display:flex; flex-direction:column; gap:8px;">
     <button onclick="addChildToSelected()">+ Add child node</button>
     <button onclick="dupeSelected()">Duplicate node</button>
     <button class="danger" onclick="deleteSelected()">Delete node</button>
@@ -412,7 +413,7 @@ function undo() {
   calloutCounter = state.calloutCounter;
   selected = null; selectedCallout = null;
   clearMultiSelect();
-  panel.classList.remove('open');
+  setPanelOpen(false);
   render();
   renderCallouts();
 }
@@ -450,6 +451,7 @@ function addChildToSelected() {
 }
 
 function addCallout() {
+  pushUndo();
   const wrap = document.getElementById('canvas-wrap');
   const x = wrap.scrollLeft + 80 + Math.random() * 200;
   const y = wrap.scrollTop + 80 + Math.random() * 120;
@@ -482,7 +484,12 @@ function clearAll() {
   closePanel(); render(); renderCallouts();
 }
 
-function selectNode(id) {
+function setPanelOpen(open) {
+  panel.classList.toggle('open', open);
+  document.body.classList.toggle('panel-open', open);
+}
+
+function selectNode(id, openPanel = true) {
   selectedCallout = null;
   clearMultiSelect();
   canvas.querySelectorAll('.callout').forEach(el => el.classList.remove('selected'));
@@ -497,13 +504,14 @@ function selectNode(id) {
   document.querySelectorAll('#panel-bg-colors .swatch').forEach(s => {
     s.classList.toggle('active', s.dataset.bgColor === (node.bgColor || 'none'));
   });
-  panel.classList.add('open');
+  if (openPanel) setPanelOpen(true);
   render();
 }
 
 function selectCallout(id) {
   selected = null;
-  panel.classList.remove('open');
+  clearMultiSelect();
+  setPanelOpen(false);
   canvas.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
   selectedCallout = id;
   canvas.querySelectorAll('.callout').forEach(el => {
@@ -512,7 +520,7 @@ function selectCallout(id) {
 }
 
 function closePanel() {
-  panel.classList.remove('open');
+  setPanelOpen(false);
   selected = null;
   render();
 }
@@ -797,7 +805,7 @@ function createNodeEl(node) {
     if (e.target.dataset.action === 'add-child') { selectNode(node.id); addChildToSelected(); return; }
     if (e.target.dataset.action === 'dupe') { selectNode(node.id); dupeNode(node.id); return; }
     if (e.target.dataset.action === 'delete') { selectNode(node.id); deleteSelected(); return; }
-    selectNode(node.id);
+    // plain body clicks are handled in startDrag's mouseup so dragging doesn't pop the panel
   });
 
   return el;
@@ -934,7 +942,7 @@ function startRubberBand(e) {
 
     if (hit.size > 0) {
       selected = null;
-      panel.classList.remove('open');
+      setPanelOpen(false);
       selectedSet = hit;
       render();
       showMultiAction();
@@ -1189,6 +1197,9 @@ function startGroupDrag(e, anchorId) {
     const n = nodes.find(x => x.id === id);
     if (n) startPositions[id] = { x: n.x, y: n.y };
   });
+  const startAnchor = startPositions[anchorId] || { x: 0, y: 0 };
+  let groupMinX = Infinity, groupMinY = Infinity;
+  Object.values(startPositions).forEach(p => { groupMinX = Math.min(groupMinX, p.x); groupMinY = Math.min(groupMinY, p.y); });
   let moved = false;
 
   selectedSet.forEach(id => canvas.querySelector(`[data-id="${id}"]`)?.classList.add('dragging'));
@@ -1197,12 +1208,18 @@ function startGroupDrag(e, anchorId) {
     moved = true;
     const dx = (ev.clientX - startX) / zoom;
     const dy = (ev.clientY - startY) / zoom;
+    // snap the whole group by the anchor node, keeping relative offsets
+    const snapA = snapPos(startAnchor.x + dx, startAnchor.y + dy);
+    let sdx = snapA.x - startAnchor.x;
+    let sdy = snapA.y - startAnchor.y;
+    if (groupMinX + sdx < 0) sdx = -groupMinX;
+    if (groupMinY + sdy < 0) sdy = -groupMinY;
     selectedSet.forEach(id => {
       const n = nodes.find(x => x.id === id);
       const el = canvas.querySelector(`[data-id="${id}"]`);
       if (!n || !el) return;
-      n.x = Math.round(startPositions[id].x + dx);
-      n.y = Math.round(startPositions[id].y + dy);
+      n.x = startPositions[id].x + sdx;
+      n.y = startPositions[id].y + sdy;
       el.style.left = n.x + 'px';
       el.style.top = n.y + 'px';
     });
@@ -1234,7 +1251,7 @@ function startDrag(e, nodeId) {
   const node = nodes.find(n => n.id === nodeId);
   const el = canvas.querySelector(`[data-id="${nodeId}"]`);
   el.classList.add('dragging');
-  selectNode(nodeId);
+  selectNode(nodeId, false);   // highlight without popping the panel mid-drag
   pushUndo();
 
   const startX = e.clientX, startY = e.clientY;
@@ -1246,8 +1263,8 @@ function startDrag(e, nodeId) {
     const rawX = startNodeX + (ev.clientX - startX) / zoom;
     const rawY = startNodeY + (ev.clientY - startY) / zoom;
     const snapped = snapPos(rawX, rawY);
-    node.x = snapped.x;
-    node.y = snapped.y;
+    node.x = Math.max(0, snapped.x);
+    node.y = Math.max(0, snapped.y);
     el.style.left = node.x + 'px';
     el.style.top = node.y + 'px';
     drawLines();
@@ -1255,10 +1272,13 @@ function startDrag(e, nodeId) {
   }
 
   function onUp() {
-    if (!moved) undoStack.pop();
     el.classList.remove('dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    if (!moved) {
+      undoStack.pop();          // it was a click, not a drag
+      selectNode(nodeId, true); // open the panel for editing
+    }
   }
 
   document.addEventListener('mousemove', onMove);
@@ -1317,8 +1337,9 @@ function exportPNG() {
   const bounds = { w: parseInt(canvas.style.width)||400, h: parseInt(canvas.style.height)||400 };
   const prevZoom = zoom; zoom = 1; applyZoom();
 
+  const pageBg = getComputedStyle(document.body).backgroundColor || '#f5f5f3';
   import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js').then(() => {
-    html2canvas(canvas, { backgroundColor: '#f5f5f3', scale: 2, width: bounds.w, height: bounds.h }).then(c => {
+    html2canvas(canvas, { backgroundColor: pageBg, scale: 2, width: bounds.w, height: bounds.h }).then(c => {
       const a = document.createElement('a');
       a.href = c.toDataURL();
       a.download = (document.getElementById('chart-title-input').value || 'orgchart') + '.png';
@@ -1356,6 +1377,8 @@ function loadJSON(event) {
       calloutCounter = data.calloutCounter || callouts.length;
       if (data.title) document.getElementById('chart-title-input').value = data.title;
       selected = null; selectedCallout = null;
+      clearMultiSelect();
+      undoStack = [];
       closePanel();
       render();
       renderCallouts();
