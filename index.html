@@ -56,7 +56,7 @@
   #chart-title-input:focus { border-bottom: 1.5px solid var(--text2); }
 
   /* CANVAS */
-  #canvas-wrap { flex: 1; overflow: auto; position: relative; transition: margin-right 0.2s; }
+  #canvas-wrap { flex: 1; overflow: auto; position: relative; }
   body.panel-open #canvas-wrap { margin-right: 240px; }
   #canvas {
     position: relative; min-width: 100%; min-height: 100%;
@@ -489,6 +489,25 @@ function setPanelOpen(open) {
   document.body.classList.toggle('panel-open', open);
 }
 
+// Scroll the canvas so a node is comfortably visible (accounting for the open panel)
+function scrollNodeIntoView(id) {
+  const wrap = document.getElementById('canvas-wrap');
+  const node = nodes.find(n => n.id === id);
+  const el = canvas.querySelector(`[data-id="${id}"]`);
+  if (!node || !el) return;
+  const P = 48; // padding from edges
+  const w = el.offsetWidth * zoom, h = el.offsetHeight * zoom;
+  const nx = node.x * zoom, ny = node.y * zoom;
+  const viewW = wrap.clientWidth, viewH = wrap.clientHeight;
+  let sl = wrap.scrollLeft, st = wrap.scrollTop;
+  if (nx < sl + P) sl = nx - P;
+  else if (nx + w > sl + viewW - P) sl = nx + w - viewW + P;
+  if (ny < st + P) st = ny - P;
+  else if (ny + h > st + viewH - P) st = ny + h - viewH + P;
+  wrap.scrollLeft = Math.max(0, sl);
+  wrap.scrollTop = Math.max(0, st);
+}
+
 function selectNode(id, openPanel = true) {
   selectedCallout = null;
   clearMultiSelect();
@@ -504,7 +523,11 @@ function selectNode(id, openPanel = true) {
   document.querySelectorAll('#panel-bg-colors .swatch').forEach(s => {
     s.classList.toggle('active', s.dataset.bgColor === (node.bgColor || 'none'));
   });
-  if (openPanel) setPanelOpen(true);
+  if (openPanel) {
+    setPanelOpen(true);
+    // canvas width has already shrunk (no transition); scroll on next frame once laid out
+    requestAnimationFrame(() => scrollNodeIntoView(id));
+  }
   render();
 }
 
